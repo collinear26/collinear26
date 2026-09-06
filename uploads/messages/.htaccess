@@ -1,0 +1,13 @@
+# Ilagay ang file na ito sa loob ng uploads/ folder, palitan ang pangalan ng
+# ".htaccess" (walang extension). Pinipigilan nito na ma-execute bilang PHP
+# ang kahit anong file dito, kahit paano pa ito na-upload.
+
+<FilesMatch "\.(php|php\d|phtml|phar|pl|py|cgi|asp|aspx|sh)$">
+    Require all denied
+</FilesMatch>
+
+# Alternative syntax para sa mas lumang Apache (uncomment kung hindi gumana ang taas):
+# <FilesMatch "\.(php|php\d|phtml|phar|pl|py|cgi|asp|aspx|sh)$">
+#     Order Deny,Allow
+#     Deny from all
+# </FilesMatch>
