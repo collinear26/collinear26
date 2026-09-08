@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'db_conn.php';
+include 'csrf.php';
 
 header('Content-Type: application/json');
 
@@ -8,6 +9,8 @@ if (!isset($_SESSION['user_id'])) {
     echo json_encode(['success' => false, 'error' => 'Not logged in']);
     exit();
 }
+
+require_csrf_json();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['message_id'])) {
     echo json_encode(['success' => false, 'error' => 'Invalid request']);

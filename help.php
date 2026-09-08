@@ -57,41 +57,15 @@ if (!isset($_SESSION['user_id'])) {
             color: #064e3b;
         }
 
-        /* Modal Overlay Style */
+        /* Modal Overlay Style — ang overlay/panel/header chrome ay galing na sa
+           shared .modal-overlay/.modal-panel sa style.css; dito na lang ang
+           .active toggle na ginagamit ng openModal()/closeModal(id). */
         .help-modal {
             display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
             backdrop-filter: blur(5px);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
         }
         .help-modal.active {
             display: flex;
-        }
-        .help-modal-content {
-            background: #ffffff;
-            padding: 24px;
-            border-radius: 16px;
-            width: 90%;
-            max-width: 480px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            position: relative;
-        }
-        .help-modal-close {
-            position: absolute;
-            top: 16px;
-            right: 16px;
-            cursor: pointer;
-            color: #64748b;
-        }
-        .help-modal-close:hover {
-            color: #dc2626;
         }
     </style>
 </head>
@@ -173,32 +147,44 @@ if (!isset($_SESSION['user_id'])) {
     </div>
 
     <!-- MODAL POPUP FOR SUBMITTING DOCUMENTS -->
-    <div class="help-modal" id="modalSubmit">
-        <div class="help-modal-content">
-            <div class="help-modal-close" onclick="closeModal('modalSubmit')"><i data-lucide="x"></i></div>
-            <h3 style="color: #064e3b; margin-bottom: 10px; font-size: 16px;">Guide: Submitting Documents</h3>
-            <p style="font-size: 12.5px; color: #334155; line-height: 1.6; margin-bottom: 12px;">
-                1. Navigate to the <strong>Submit Document</strong> section.<br>
-                2. Upload your file in <strong>PDF format</strong> (maximum of 10MB only).<br>
-                3. Fill out the required information and select the appropriate department routing.<br>
-                4. Click submit to generate and receive your unique Control ID.
-            </p>
-            <button class="primary-btn" onclick="closeModal('modalSubmit')" style="width: 100%; justify-content: center;">Got it</button>
+    <div class="modal-overlay help-modal" id="modalSubmit">
+        <div class="modal-panel modal-panel--sm">
+            <div class="modal-header">
+                <div class="modal-header-text"><h3 style="color: #064e3b;">Guide: Submitting Documents</h3></div>
+                <button type="button" class="modal-close" onclick="closeModal('modalSubmit')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 13px; color: #334155; line-height: 1.6; margin: 0;">
+                    1. Navigate to the <strong>Submit Document</strong> section.<br>
+                    2. Upload your file in <strong>PDF format</strong> (maximum of 10MB only).<br>
+                    3. Fill out the required information and select the appropriate department routing.<br>
+                    4. Click submit to generate and receive your unique Control ID.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn modal-btn-primary" onclick="closeModal('modalSubmit')" style="width: 100%; justify-content: center;"><i data-lucide="check"></i> Got it</button>
+            </div>
         </div>
     </div>
 
     <!-- MODAL POPUP FOR CONTACT SUPPORT -->
-    <div class="help-modal" id="modalContact">
-        <div class="help-modal-content">
-            <div class="help-modal-close" onclick="closeModal('modalContact')"><i data-lucide="x"></i></div>
-            <h3 style="color: #064e3b; margin-bottom: 10px; font-size: 16px;">ASCOT IT Services & Records Support</h3>
-            <p style="font-size: 12.5px; color: #334155; line-height: 1.6; margin-bottom: 12px;">
-                For urgent inquiries or technical concerns:<br><br>
-                📧 <strong>Email:</strong> support@ascot.edu.ph<br>
-                📞 <strong>Office Hours:</strong> Monday to Friday (8:00 AM - 5:00 PM)<br>
-                📍 <strong>Location:</strong> ASCOT Main Campus, Records Management Office
-            </p>
-            <button class="primary-btn" onclick="closeModal('modalContact')" style="width: 100%; justify-content: center;">Close</button>
+    <div class="modal-overlay help-modal" id="modalContact">
+        <div class="modal-panel modal-panel--sm">
+            <div class="modal-header">
+                <div class="modal-header-text"><h3 style="color: #064e3b;">ASCOT IT Services & Records Support</h3></div>
+                <button type="button" class="modal-close" onclick="closeModal('modalContact')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 13px; color: #334155; line-height: 1.6; margin: 0;">
+                    For urgent inquiries or technical concerns:<br><br>
+                    📧 <strong>Email:</strong> support@ascot.edu.ph<br>
+                    📞 <strong>Office Hours:</strong> Monday to Friday (8:00 AM - 5:00 PM)<br>
+                    📍 <strong>Location:</strong> ASCOT Main Campus, Records Management Office
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn modal-btn-primary" onclick="closeModal('modalContact')" style="width: 100%; justify-content: center;"><i data-lucide="x"></i> Close</button>
+            </div>
         </div>
     </div>
 

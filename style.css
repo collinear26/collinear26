@@ -212,6 +212,13 @@ html.sidebar-is-collapsed .user-info {
     padding: 16px 10px !important;
 }
 
+/* BUG FIX: dati, "opacity: 0" lang ang ginagamit dito para itago ang labels,
+   pero nananatili pa rin ang buong text width/height nila sa layout kahit
+   invisible na — dahil "justify-content: center" ang ginagamit para i-center
+   ang icon kapag naka-collapse, ang icon mismo ang natutulak papalabas ng
+   visible area (nagiging negative ang x-position nito, kaya parang "nawawala"
+   ang icon). Ang tunay na ayos: alisin din sa layout flow (width/height/margin
+   sa zero) ang mga label na ito, hindi lang gawing invisible. */
 .sidebar.collapsed .brand-text,
 .sidebar.collapsed .section-label,
 .sidebar.collapsed .nav-item span,
@@ -219,6 +226,13 @@ html.sidebar-is-collapsed .user-info {
 .sidebar.collapsed .user-info {
     opacity: 0 !important;
     pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
 }
 
 .sidebar.collapsed .brand {
@@ -231,7 +245,15 @@ html.sidebar-is-collapsed .user-info {
 
 .sidebar.collapsed .brand-logo {
     justify-content: center;
+    gap: 0;
     margin: 0;
+}
+
+/* Kapag naka-collapse, hindi na kailangan ng gap sa pagitan ng icon at ng
+   (invisible na) label — para maging talagang naka-center ang icon mismo,
+   hindi ang "icon + zero-width label" na pinagsamang grupo */
+.sidebar.collapsed .nav-item {
+    gap: 0;
 }
 
 .sidebar.collapsed .collapse-btn {
@@ -283,6 +305,40 @@ html.sidebar-is-collapsed .user-info {
 .sidebar.collapsed .logout-btn {
     margin-left: 0;
     padding: 4px;
+}
+
+/* MOBILE MENU BUTTON & BACKDROP — Hidden on desktop/tablet by default; only
+   shown by the mobile media query below. On mobile the sidebar becomes an
+   off-canvas drawer, so this button is the only way to open it (the
+   collapse button lives INSIDE the sidebar, unreachable while it's hidden). */
+.mobile-menu-btn {
+    display: none;
+    position: fixed;
+    top: 14px;
+    left: 14px;
+    z-index: 1002;
+    width: 40px;
+    height: 40px;
+    align-items: center;
+    justify-content: center;
+    background: #ffffff;
+    color: #064e3b;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+}
+
+.sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 999;
+}
+
+.sidebar-backdrop.visible {
+    display: block;
 }
 
 /* MAIN WRAPPER & CONTENT */
@@ -366,6 +422,12 @@ html.sidebar-is-collapsed .user-info {
     padding: 20px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
     animation: cardPopIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    /* RESPONSIVE FIX: kapag mas maliit ang screen kaysa sa isang table sa
+       loob nito (documents, users, tracking, atbp.), dating natatabunan/
+       nawawala na lang ang extra columns dahil "overflow: hidden" ang parent
+       .app-container. Dito na lang mag-scroll nang horizontal ang card mismo,
+       para hindi mawala ang datos. */
+    overflow-x: auto;
 }
 
 @keyframes cardPopIn {
@@ -377,6 +439,386 @@ html.sidebar-is-collapsed .user-info {
         opacity: 1;
         transform: scale(1) translateY(0);
     }
+}
+
+/* ==========================================
+   SHARED MODAL SYSTEM
+   Ang mga sumusunod na klase ang gagamitin ng LAHAT ng modal sa buong app
+   (View/Edit Document, Add/Edit User, Tracking History, Approvals, Routing,
+   Release, mga confirmation dialog, atbp.) para iisa lang ang "look" at
+   hindi na kailangang ulit-ulitin ang parehong inline styles sa bawat file.
+   Ang display:none/flex toggle ay nananatiling JS-controlled (inline style)
+   gaya ng dati — ang mga klase dito ay para lang sa visual chrome.
+   ========================================== */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    box-sizing: border-box;
+}
+
+.modal-panel {
+    background: #ffffff;
+    border-radius: 18px;
+    box-shadow: 0 24px 60px -12px rgba(15, 23, 42, 0.35), 0 4px 16px rgba(15, 23, 42, 0.08);
+    width: 100%;
+    max-width: 520px;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
+    animation: modalPopIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.modal-panel--sm { max-width: 420px; }
+.modal-panel--md { max-width: 520px; }
+.modal-panel--lg { max-width: 640px; }
+.modal-panel--xl { max-width: 780px; }
+
+@keyframes modalPopIn {
+    from { opacity: 0; transform: scale(0.96) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Karamihan sa mga modal ay may <form> na nakapaloob sa pagitan ng
+   .modal-panel at ng .modal-body/.modal-footer nito (kailangan ng <form> para
+   gumana ang submit button). Ang <form> mismo ay plain block element by
+   default — kaya kahit "flex: 1 1 auto" ang nakalagay sa .modal-body, walang
+   epekto iyon hangga't hindi rin flex container ang immediate parent nitong
+   <form>. Ito ang naging dahilan kung bakit hindi tama ang pag-shrink/scroll
+   ng mahahabang form (natatakpan na lang ng overflow:hidden ng panel sa
+   halip na mag-scroll nang maayos ang .modal-body). */
+.modal-panel > form {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+    flex-shrink: 0;
+}
+.modal-header-text h3, .modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f172a;
+}
+.modal-subtitle {
+    margin: 4px 0 0 0;
+    font-size: 12.5px;
+    color: #64748b;
+}
+.modal-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: #f0fdf4;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    margin-left: 8px;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+.modal-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: #f1f5f9;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.modal-close:hover { background: #e2e8f0; color: #0f172a; }
+
+.modal-body {
+    padding: 20px 24px;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.modal-section {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.modal-section-title {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #166534;
+}
+.modal-field { display: flex; flex-direction: column; gap: 5px; }
+.modal-field label { font-size: 13px; font-weight: 600; color: #334155; }
+.modal-field label .hint { font-weight: 400; color: #94a3b8; font-size: 12px; }
+.modal-field input,
+.modal-field select,
+.modal-field textarea {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    color: #0f172a;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.modal-field input:focus,
+.modal-field select:focus,
+.modal-field textarea:focus {
+    outline: none;
+    border-color: #064e3b;
+    box-shadow: 0 0 0 3px rgba(6, 78, 59, 0.12);
+}
+.modal-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+.modal-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; }
+.modal-info-label {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 3px;
+}
+.modal-info-value { margin: 0; color: #0f172a; font-size: 14px; }
+
+.modal-timeline { display: flex; flex-direction: column; }
+.modal-timeline-item {
+    position: relative;
+    padding: 0 0 18px 22px;
+    border-left: 2px solid #e2e8f0;
+}
+.modal-timeline-item:last-child { border-left-color: transparent; padding-bottom: 0; }
+.modal-timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -6px;
+    top: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #064e3b;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 2px #064e3b;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 24px;
+    border-top: 1px solid #e2e8f0;
+    flex-shrink: 0;
+    background: #ffffff;
+}
+.modal-footer-note { margin-right: auto; font-size: 12px; color: #94a3b8; }
+.modal-btn {
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.modal-btn i, .modal-btn svg { width: 14px; height: 14px; }
+.modal-identity-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+}
+.modal-identity-card .modal-info-grid { flex: 1; }
+.modal-btn-secondary { background: #e2e8f0; color: #475569; }
+.modal-btn-secondary:hover { background: #cbd5e1; }
+.modal-btn-primary { background: #064e3b; color: #fff; box-shadow: 0 4px 14px rgba(6, 78, 59, 0.25); }
+.modal-btn-primary:hover { background: #022c22; }
+.modal-btn-danger { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+.modal-btn-danger:hover { background: #fee2e2; }
+.modal-btn-info { background: #1d4ed8; color: #fff; }
+.modal-btn-info:hover { background: #1e40af; }
+
+.modal-checkbox-row { display: flex; align-items: center; gap: 8px; }
+.modal-checkbox-row input[type="checkbox"], .modal-checkbox-row input[type="radio"] { width: 16px; height: 16px; flex-shrink: 0; }
+.modal-checkbox-row label { font-size: 13px; font-weight: 600; color: #334155; cursor: pointer; margin: 0; }
+.modal-checkbox-row.danger label { color: #991b1b; }
+.modal-hint { font-size: 12px; color: #94a3b8; font-weight: 400; }
+.modal-note {
+    font-size: 12px;
+    color: #64748b;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.modal-radio-group { display: flex; gap: 16px; flex-wrap: wrap; }
+
+/* ==========================================
+   SEARCHABLE PICKER (document/record combobox)
+   Pinapalitan nito ang native <select> na hirap gamitin kapag maraming
+   documents (walang search, mahirap makahanap sa mahabang listahan). Isang
+   text input na may live-filtered na scrollable list sa ibaba — kagaya ng
+   pattern na ginamit na sa "Start New Conversation" user picker.
+   ========================================== */
+.searchable-picker { position: relative; }
+.searchable-picker-input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    color: #0f172a;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.searchable-picker-input:focus {
+    outline: none;
+    border-color: #064e3b;
+    box-shadow: 0 0 0 3px rgba(6, 78, 59, 0.12);
+}
+.searchable-picker-list {
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    max-height: 240px;
+    overflow-y: auto;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.15);
+    z-index: 30;
+    padding: 6px;
+}
+.searchable-picker-list.open { display: flex; }
+.searchable-picker-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+}
+.searchable-picker-item:hover { background: #f0fdf4; }
+.searchable-picker-item-tag { font-size: 11.5px; color: #064e3b; font-weight: 800; }
+.searchable-picker-item-label { font-size: 12.5px; color: #334155; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.searchable-picker-empty { padding: 14px; text-align: center; color: #94a3b8; font-size: 12.5px; }
+
+/* ==========================================
+   ROW ACTIONS DROPDOWN
+   Pinapalitan nito ang dating magulong hanay ng maraming inline icon button
+   sa bawat row (View/Download/Edit/Receive/Release/Archive) ng iisang "..."
+   button na nagbubukas ng menu. Ang .row-actions-menu ay ini-move ng JS papunta
+   sa <body> kapag binuksan (dahil may mga ancestor gaya ng .card na may
+   natitirang CSS transform mula sa animation-fill-mode:forwards nito, na
+   sumisira sa position:fixed kung nasa loob pa rin ito ng ancestor na iyon) —
+   ang mismong laman (buttons/forms/data attributes) ay hindi ginagalaw,
+   iisang node lang ang inilipat, kaya hindi nawawala ang mga existing
+   event listener o nadodoble ang mga id.
+   ========================================== */
+.row-actions { position: relative; display: inline-flex; }
+.row-actions-toggle {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #64748b;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.row-actions-toggle:hover, .row-actions-toggle.open { background: #f1f5f9; color: #0f172a; }
+.row-actions-toggle i, .row-actions-toggle svg { width: 16px; height: 16px; }
+
+.row-actions-menu {
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    position: fixed;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+    min-width: 190px;
+    padding: 6px;
+    z-index: 1200;
+}
+.row-actions-menu.open { display: flex; }
+.row-actions-menu form { margin: 0; }
+.row-actions-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 7px;
+    border: none;
+    background: none;
+    font-size: 13px;
+    font-weight: 600;
+    color: #334155;
+    cursor: pointer;
+    text-align: left;
+    text-decoration: none;
+    box-sizing: border-box;
+}
+.row-actions-item:hover { background: #f8fafc; }
+.row-actions-item:disabled { opacity: 0.45; cursor: not-allowed; }
+.row-actions-item:disabled:hover { background: none; }
+.row-actions-item i, .row-actions-item svg { width: 14px; height: 14px; flex-shrink: 0; }
+.row-actions-item.danger, .row-actions-item.archive-item { color: inherit; }
+
+@media (max-width: 768px) {
+    .modal-overlay { padding: 12px; }
+    .modal-panel { max-height: 94vh; border-radius: 14px; }
+    .modal-header, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; }
+    .modal-grid-2, .modal-info-grid { grid-template-columns: 1fr; }
 }
 
 /* STATS GRID */
@@ -490,6 +932,9 @@ tr:hover td, .custom-table tr:hover { background: rgba(16, 185, 129, 0.04); }
 .badge-pending, .status-pending { background: rgba(245, 158, 11, 0.18); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3); }
 .badge-inactive, .status-overdue { background: rgba(239, 68, 68, 0.15); color: #b91c1c; border: 1px solid rgba(239, 68, 68, 0.3); }
 .badge-archived { background: rgba(100, 116, 139, 0.18); color: #475569; border: 1px solid rgba(100, 116, 139, 0.3); }
+.status-released { background: rgba(29, 78, 216, 0.15); color: #1d4ed8; border: 1px solid rgba(29, 78, 216, 0.3); }
+.status-submitted { background: rgba(100, 116, 139, 0.15); color: #475569; border: 1px solid rgba(100, 116, 139, 0.3); }
+.status-completed { background: rgba(13, 148, 136, 0.15); color: #0f766e; border: 1px solid rgba(13, 148, 136, 0.3); }
 
 /* TRACKING SPECIFIC STYLES */
 .route-path { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #334155; }
@@ -804,6 +1249,134 @@ tr:hover td, .custom-table tr:hover { background: rgba(16, 185, 129, 0.04); }
     transform: translateX(0);
 }
 
+/* ==========================================
+   RESPONSIVE LAYOUT
+   Desktop/laptop behavior above is unchanged. These breakpoints only adapt
+   the EXISTING sidebar/layout for smaller screens — no redesign, no new
+   colors/icons/nav items.
+   ========================================== */
+
+/* TABLET (~1024px and below): sidebar stays in normal flow exactly as on
+   desktop (still user-collapsible to the icon-only 78px state) — just tighten
+   the outer spacing a bit so content has more room to breathe. */
+@media (max-width: 1024px) {
+    .top-header {
+        padding: 20px 24px 12px 24px;
+    }
+    .content {
+        padding: 12px 24px 28px 24px;
+    }
+    /* Konting bawas sa badge padding/font sa tablet range, para gumana nang
+       maayos ang mas makitid na Tracking/Approval Status columns nang hindi
+       na kailangang mag-overflow ang status-badge/badge papasok sa katabing
+       column. */
+    #documentsTable .status-badge,
+    #documentsTable .badge {
+        font-size: 9.5px;
+        padding: 3px 7px;
+    }
+}
+
+/* MOBILE (~768px and below): the sidebar becomes an off-canvas drawer
+   (existing design/colors preserved) instead of a permanent column, since a
+   fixed 260px sidebar has no room to coexist with real content at this
+   width. Hidden by default, slides in over the content when opened via the
+   hamburger button, closes via the backdrop or the same button used to
+   open it. */
+@media (max-width: 768px) {
+    .mobile-menu-btn {
+        display: flex;
+    }
+
+    .app-container {
+        display: block;
+    }
+
+    .sidebar,
+    .sidebar.collapsed {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 260px !important;
+        min-width: 260px !important;
+        max-width: 82vw !important;
+        height: 100vh;
+        z-index: 1000;
+        transform: translateX(-100%);
+        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        padding: 24px 18px 18px 18px !important;
+        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+    }
+
+    /* Sa mobile, ibig sabihin ng "bukas" ay buong-labels (hindi yung
+       icon-only na 78px mode) — kaya hindi dapat ipilit ng .collapsed dito
+       ang mga zero-width/opacity-0 na label rules na para lang sa desktop */
+    .sidebar.collapsed .brand-text,
+    .sidebar.collapsed .section-label,
+    .sidebar.collapsed .nav-item span,
+    .sidebar.collapsed .nav-badge,
+    .sidebar.collapsed .user-info {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        width: auto !important;
+        height: auto !important;
+        margin: initial !important;
+        padding: initial !important;
+        overflow: visible !important;
+    }
+    .sidebar.collapsed .brand { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .sidebar.collapsed .brand-logo { justify-content: flex-start; gap: 10px; }
+    .sidebar.collapsed .nav-item { justify-content: flex-start; padding: 10px 14px; width: auto; }
+    .sidebar.collapsed .nav-item.active::after { display: block; }
+    .sidebar.collapsed .user-profile { flex-direction: row; align-items: center; padding: 10px 12px; background: rgba(255,255,255,0.9); border: 1px solid rgba(6,78,59,0.2); box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    .sidebar.collapsed .logout-btn { margin-left: auto; }
+
+    .sidebar.mobile-open {
+        transform: translateX(0);
+    }
+
+    .main-wrapper {
+        width: 100%;
+        overflow-x: hidden;
+    }
+
+    .top-header {
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 64px 16px 12px 16px; /* top padding clears the fixed hamburger button */
+    }
+
+    .content {
+        padding: 12px 16px 28px 16px;
+    }
+
+    .header-actions {
+        flex-wrap: wrap;
+    }
+
+    /* Ang documents table ay "table-layout: fixed" na may percentage widths —
+       sa napakaliit na screen, i-let na lang mag-scroll ang card sa halip na
+       piga-pigain ang bawat column hanggang di na mabasa */
+    #documentsTable {
+        table-layout: auto;
+        min-width: 720px;
+    }
+
+    /* Iwasan ang pahalang na overflow mula sa mga bagong stat/grid section na
+       idinagdag sa dashboard (Documents by Department, atbp.) */
+    table, .custom-table {
+        min-width: 600px;
+    }
+}
+
+/* SMALL MOBILE (~420px and below) */
+@media (max-width: 420px) {
+    .top-header { padding: 60px 12px 10px 12px; }
+    .content { padding: 10px 12px 24px 12px; }
+    .page-title h1 { font-size: 18px; }
+    .primary-btn, .secondary-btn { padding: 8px 12px; font-size: 11px; }
+}
+
 @media print {
     body * {
         visibility: hidden;
@@ -922,14 +1495,15 @@ tr:hover td, .custom-table tr:hover { background: rgba(16, 185, 129, 0.04); }
     border-color: #dc2626 !important;
     color: #dc2626 !important;
 }
-/* I-fix ang mahabang text para hindi lumagpas sa table cells */
-#documentsTable td {
-    max-width: 250px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
+/* Ang .truncate-cell (Document Title/Sender) ang responsable para sa ellipsis
+   truncation ng mahabang FREE TEXT — hindi dapat ito basta i-apply sa LAHAT
+   ng td (kasama ang mga status badge), dahil doon nagmumula ang "dots"/"…"
+   na artifact: kapag na-clip ng overflow:hidden ang isang naka-rounded na
+   pill badge, ang browser mismo ang naglalagay ng "…" character sa
+   nakikitang gilid nito — parang stray na tuldok sa tabi ng badge.
+   (Dati, may DALAWANG magkasalungat na #documentsTable td rules dito —
+   isa'y nowrap+ellipsis, isa pa'y word-break+wrap — magkasalungat sila kaya
+   hindi determinado ang resulta.) */
 .truncate-cell {
     max-width: 240px;
     overflow: hidden;
@@ -943,18 +1517,33 @@ tr:hover td, .custom-table tr:hover { background: rgba(16, 185, 129, 0.04); }
     table-layout: fixed;
 }
 
-#documentsTable th, 
+#documentsTable th,
 #documentsTable td {
-    word-break: break-word;
     overflow: hidden;
+    word-break: break-word;
+}
+
+/* Ang overflow:hidden ay ipinapasa mula sa PARENT td papunta sa lahat ng
+   laman nito (kasama ang badge), kaya hindi sapat na "overflow: visible" lang
+   sa badge mismo — ang TD MISMO ang dapat huwag mag-clip para sa dalawang
+   column na ito, dahil hindi natin ma-guarantee na palaging sasapat ang
+   lapad nito sa lahat ng viewport width (tablet/mobile). Mas ligtas na
+   pumalabas nang bahagya ang maikling badge kaysa putulin ang mismong salita. */
+#documentsTable td:nth-child(6),
+#documentsTable td:nth-child(7) {
+    overflow: visible;
+}
+#documentsTable td:nth-child(6) .status-badge,
+#documentsTable td:nth-child(7) .badge {
+    white-space: nowrap;
 }
 
 /* Magbigay ng tamang sukat sa bawat column */
-#documentsTable th:nth-child(1), #documentsTable td:nth-child(1) { width: 13%; } /* Tracking No */
-#documentsTable th:nth-child(2), #documentsTable td:nth-child(2) { width: 26%; } /* Document Details */
-#documentsTable th:nth-child(3), #documentsTable td:nth-child(3) { width: 14%; } /* Category & Class */
-#documentsTable th:nth-child(4), #documentsTable td:nth-child(4) { width: 18%; } /* Sender / Office */
-#documentsTable th:nth-child(5), #documentsTable td:nth-child(5) { width: 10%; } /* Date Created */
-#documentsTable th:nth-child(6), #documentsTable td:nth-child(6) { width: 9%; }  /* Tracking Status */
-#documentsTable th:nth-child(7), #documentsTable td:nth-child(7) { width: 9%; }  /* Approval Status */
-#documentsTable th:nth-child(8), #documentsTable td:nth-child(8) { width: 11%; text-align: right; } /* Action */
+#documentsTable th:nth-child(1), #documentsTable td:nth-child(1) { width: 12%; } /* Tracking No */
+#documentsTable th:nth-child(2), #documentsTable td:nth-child(2) { width: 21%; } /* Document Details */
+#documentsTable th:nth-child(3), #documentsTable td:nth-child(3) { width: 12%; } /* Category & Class */
+#documentsTable th:nth-child(4), #documentsTable td:nth-child(4) { width: 16%; } /* Sender / Office */
+#documentsTable th:nth-child(5), #documentsTable td:nth-child(5) { width: 9%; }  /* Date Created */
+#documentsTable th:nth-child(6), #documentsTable td:nth-child(6) { width: 11%; } /* Tracking Status */
+#documentsTable th:nth-child(7), #documentsTable td:nth-child(7) { width: 11%; } /* Approval Status */
+#documentsTable th:nth-child(8), #documentsTable td:nth-child(8) { width: 8%; text-align: right; white-space: nowrap; } /* Action */

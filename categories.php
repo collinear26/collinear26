@@ -2,6 +2,7 @@
 session_start();
 include 'db_conn.php';
 include 'log_activity.php'; // I-include ang audit logger
+include 'csrf.php';
 
 // Auth check + admin-only role check
 if (!isset($_SESSION['user_id'])) {
@@ -18,6 +19,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: categories.php?error=unauthorized");
         exit();
     }
+
+    require_csrf();
 
     if (isset($_POST['action'])) {
         if ($_POST['action'] === 'add') {
@@ -213,6 +216,7 @@ if (isset($_GET['success'])) {
                                     <div class="action-btns" style="display: flex; gap: 4px;">
                                         <?php if (strtolower(trim($_SESSION['user_type'] ?? '')) === 'admin'): ?>
                                             <form method="POST" class="delete-category-form" data-file-count="<?php echo $file_count; ?>" data-category-name="<?php echo htmlspecialchars($row['name'], ENT_QUOTES); ?>" style="margin: 0;">
+                                                <?php csrf_field(); ?>
                                                 <input type="hidden" name="action" value="delete">
                                                 <input type="hidden" name="category_id" value="<?php echo $row['id']; ?>">
                                                 <button type="button" class="action-icon-btn delete-category-btn" title="<?php echo $file_count > 0 ? 'Cannot delete: has linked documents' : 'Delete'; ?>" style="background:none; border:none; cursor:pointer;">
@@ -236,47 +240,52 @@ if (isset($_GET['success'])) {
     </div>
 
     <!-- ADD CATEGORY MODAL -->
-    <div id="addCategoryModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
-        <div style="background: white; padding: 24px; border-radius: 12px; width: 400px; max-width: 90%;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <h3 style="margin: 0; font-size: 18px; color: #0f172a;">Add New Category</h3>
-                <button type="button" onclick="closeAddModal()" style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748b;">&times;</button>
+    <div id="addCategoryModal" class="modal-overlay" style="display: none;">
+        <div class="modal-panel modal-panel--sm">
+            <div class="modal-header">
+                <div class="modal-header-text"><h3>Add New Category</h3></div>
+                <button type="button" onclick="closeAddModal()" class="modal-close">&times;</button>
             </div>
             <form method="POST">
+                <?php csrf_field(); ?>
                 <input type="hidden" name="action" value="add">
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Category Name</label>
-                    <input type="text" name="name" required placeholder="e.g. Research & Extension" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
+                <div class="modal-body">
+                <div class="modal-field">
+                    <label>Category Name</label>
+                    <input type="text" name="name" required placeholder="e.g. Research & Extension">
                 </div>
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Description</label>
-                    <textarea name="description" required rows="3" placeholder="Short description..." style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;"></textarea>
+                <div class="modal-field">
+                    <label>Description</label>
+                    <textarea name="description" required rows="3" placeholder="Short description..."></textarea>
                 </div>
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Lucide Icon Name</label>
-                    <input type="text" name="icon" value="file-text" required placeholder="e.g. file-text, users, folder" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
+                <div class="modal-field">
+                    <label>Lucide Icon Name</label>
+                    <input type="text" name="icon" value="file-text" required placeholder="e.g. file-text, users, folder">
                 </div>
-                <div style="display: flex; justify-content: flex-end; gap: 8px;">
-                    <button type="button" onclick="closeAddModal()" style="padding: 8px 16px; background: #e2e8f0; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; color: #475569;">Cancel</button>
-                    <button type="submit" style="padding: 8px 16px; background: #166534; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Save Category</button>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" onclick="closeAddModal()" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Cancel</button>
+                    <button type="submit" class="modal-btn modal-btn-primary"><i data-lucide="check"></i> Save Category</button>
                 </div>
             </form>
         </div>
     </div>
 
     <!-- DELETE CATEGORY CONFIRMATION MODAL -->
-    <div id="deleteConfirmModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1050; justify-content: center; align-items: center;">
-        <div style="background: white; padding: 26px; border-radius: 12px; width: 400px; max-width: 90%; text-align: center;">
-            <div id="deleteModalIcon" style="width: 44px; height: 44px; border-radius: 50%; background: #fee2e2; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px auto;">
-                <i data-lucide="trash-2" style="width: 20px; color: #ef4444;"></i>
+    <div id="deleteConfirmModal" class="modal-overlay" style="display: none; z-index: 1050;">
+        <div class="modal-panel modal-panel--sm" style="text-align: center;">
+            <div class="modal-body" style="align-items: center;">
+                <div id="deleteModalIcon" style="width: 44px; height: 44px; border-radius: 50%; background: #fee2e2; display: flex; align-items: center; justify-content: center; margin: 6px auto 0 auto;">
+                    <i data-lucide="trash-2" style="width: 20px; color: #ef4444;"></i>
+                </div>
+                <h3 id="deleteModalTitle" style="margin: 0; font-size: 17px; color: #0f172a;">Delete Category</h3>
+                <p id="deleteModalMessage" style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0;">
+                    Are you sure you want to delete this category?
+                </p>
             </div>
-            <h3 id="deleteModalTitle" style="margin: 0 0 8px 0; font-size: 17px; color: #0f172a;">Delete Category</h3>
-            <p id="deleteModalMessage" style="font-size: 13px; color: #64748b; margin-bottom: 20px; line-height: 1.5;">
-                Are you sure you want to delete this category?
-            </p>
-            <div style="display: flex; justify-content: center; gap: 8px;">
-                <button type="button" id="cancelDeleteBtn" style="padding: 8px 18px; background: #e2e8f0; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; color: #475569;">Cancel</button>
-                <button type="button" id="confirmDeleteBtn" style="padding: 8px 18px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Yes, Delete</button>
+            <div class="modal-footer" style="justify-content: center;">
+                <button type="button" id="cancelDeleteBtn" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Cancel</button>
+                <button type="button" id="confirmDeleteBtn" class="modal-btn" style="background: #ef4444; color: #fff;"><i data-lucide="trash-2"></i> Yes, Delete</button>
             </div>
         </div>
     </div>
@@ -315,12 +324,12 @@ if (isset($_GET['success'])) {
                 if (fileCount > 0) {
                     deleteModalMessage.innerHTML = `<strong>"${categoryName}"</strong> still has <strong>${fileCount} document(s)</strong> linked to it and cannot be deleted. Please reassign or remove those documents first.`;
                     confirmDeleteBtn.style.display = 'none';
-                    cancelDeleteBtn.innerText = 'Okay';
+                    cancelDeleteBtn.innerHTML = '<i data-lucide="check"></i> Okay';
                     formToSubmit = null;
                 } else {
                     deleteModalMessage.innerHTML = `Are you sure you want to delete <strong>"${categoryName}"</strong>? This action cannot be undone.`;
-                    confirmDeleteBtn.style.display = 'inline-block';
-                    cancelDeleteBtn.innerText = 'Cancel';
+                    confirmDeleteBtn.style.display = 'inline-flex';
+                    cancelDeleteBtn.innerHTML = '<i data-lucide="x"></i> Cancel';
                     formToSubmit = form;
                 }
 

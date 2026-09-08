@@ -20,19 +20,23 @@ if ($conv_id <= 0) {
 
 // SECURITY: i-verify na kabilang talaga ang naka-login na user sa
 // conversation na ito bago natin ipakita ang kahit anong messages dito
-$verify_query = "SELECT id FROM conversations WHERE id = $conv_id AND (user_one_id = $my_id OR user_two_id = $my_id) LIMIT 1";
-$verify_result = mysqli_query($conn, $verify_query);
+$verify_stmt = mysqli_prepare($conn, "SELECT id FROM conversations WHERE id = ? AND (user_one_id = ? OR user_two_id = ?) LIMIT 1");
+mysqli_stmt_bind_param($verify_stmt, "iii", $conv_id, $my_id, $my_id);
+mysqli_stmt_execute($verify_stmt);
+$verify_result = mysqli_stmt_get_result($verify_stmt);
 
 if (!$verify_result || mysqli_num_rows($verify_result) === 0) {
     echo json_encode(['success' => false, 'error' => 'Unauthorized']);
     exit();
 }
 
-$query = "SELECT m.id, m.sender_id, m.message_text, m.attachment_path, m.attachment_name, m.edited_at, m.is_deleted, m.created_at 
-          FROM messages m 
-          WHERE m.conversation_id = $conv_id AND m.id > $after_id 
-          ORDER BY m.id ASC";
-$result = mysqli_query($conn, $query);
+$msg_stmt = mysqli_prepare($conn, "SELECT m.id, m.sender_id, m.message_text, m.attachment_path, m.attachment_name, m.edited_at, m.is_deleted, m.created_at
+          FROM messages m
+          WHERE m.conversation_id = ? AND m.id > ?
+          ORDER BY m.id ASC");
+mysqli_stmt_bind_param($msg_stmt, "ii", $conv_id, $after_id);
+mysqli_stmt_execute($msg_stmt);
+$result = mysqli_stmt_get_result($msg_stmt);
 
 $messages = [];
 if ($result) {
@@ -52,6 +56,8 @@ if ($result) {
 
 // I-mark na "read" ang mga bagong messages na kakadating lang, dahil
 // naka-open na ngayon ang user sa conversation na ito (real-time viewing)
-mysqli_query($conn, "UPDATE messages SET is_read = 1 WHERE conversation_id = $conv_id AND sender_id != $my_id AND is_read = 0");
+$read_stmt = mysqli_prepare($conn, "UPDATE messages SET is_read = 1 WHERE conversation_id = ? AND sender_id != ? AND is_read = 0");
+mysqli_stmt_bind_param($read_stmt, "ii", $conv_id, $my_id);
+mysqli_stmt_execute($read_stmt);
 
 echo json_encode(['success' => true, 'messages' => $messages]);

@@ -1,6 +1,9 @@
 <?php
 session_start();
 include 'db_conn.php';
+include 'document_access.php'; // Centralized master-scope/department check
+include 'csrf.php';
+include 'upload_validation.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
@@ -8,41 +11,92 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $title = mysqli_real_escape_string($conn, mb_substr(trim($_POST['title']), 0, 150));
-    $category = mysqli_real_escape_string($conn, $_POST['category']);
-    $classification = mysqli_real_escape_string($conn, $_POST['classification']);
-    $routing_type = mysqli_real_escape_string($conn, $_POST['routing_type']);
-    $sender = mysqli_real_escape_string($conn, mb_substr(trim($_POST['sender']), 0, 100));
-    $tracking_status = mysqli_real_escape_string($conn, $_POST['status']);
-    
-    // Stamp Metadata & Confidential Protocol
-    $stamped_date = !empty($_POST['stamped_date']) ? mysqli_real_escape_string($conn, $_POST['stamped_date']) : NULL;
-    $stamped_time = !empty($_POST['stamped_time']) ? mysqli_real_escape_string($conn, $_POST['stamped_time']) : NULL;
-    $signatory = !empty($_POST['signatory']) ? mysqli_real_escape_string($conn, mb_substr(trim($_POST['signatory']), 0, 100)) : NULL;
+    require_csrf();
+    $is_master = is_master_scope_user();
+
+    $title = mb_substr(trim($_POST['title'] ?? ''), 0, 150);
+    $category = trim($_POST['category'] ?? '');
+    $classification = trim($_POST['classification'] ?? '');
+    $sender = mb_substr(trim($_POST['sender'] ?? ''), 0, 100);
+    $signatory = !empty($_POST['signatory']) ? mb_substr(trim($_POST['signatory']), 0, 100) : NULL;
     $is_confidential = isset($_POST['is_confidential']) ? 1 : 0;
 
-    // New Workflow Fields (Copy Retention, OP Notes, Dissemination Method)
-    $copy_retained = isset($_POST['copy_retained']) ? 1 : 0;
-    $op_notes = !empty($_POST['op_notes']) ? mysqli_real_escape_string($conn, trim($_POST['op_notes'])) : NULL;
-    $dissemination_method = !empty($_POST['dissemination_method']) ? mysqli_real_escape_string($conn, $_POST['dissemination_method']) : NULL;
+    // SYSTEM-CONTROLLED FIELDS: hindi ito basta kinukuha mula sa $_POST kahit
+    // sinong role ang nag-submit. Para sa isang ordinaryong department user
+    // (hindi Records Unit/Admin), pinipilit ng backend ang mga sumusunod na
+    // value kahit anong ipadala nila (kahit direktang POST request, hindi
+    // lang basta pag-hide ng field sa form) — dahil ang mga ito ay
+    // workflow-controlled, hindi user-controlled:
+    //   - Tracking Status (laging "Submitted" ang unang status ng isang
+    //     department submission — hindi sila makapagta-type ng "Approved",
+    //     "Completed", atbp.)
+    //   - Routing Type (laging "Receive" — pumapasok papuntang Records Unit,
+    //     hindi nila desisyon kung Incoming o Outgoing ito)
+    //   - Stamp Date/Time (opisyal na Records Unit receiving stamp — Records
+    //     Unit lang ang naglalagay nito, hindi ang submitting department)
+    //   - Copy Retained (Records Unit operational detail, hindi alam ng
+    //     submitting department kung may photocopy na naiwan sa opisina)
+    //   - OP Notes / Instructions (para lang sa OP/Records Unit sa susunod na
+    //     bahagi ng workflow, hindi bahagi ng orihinal na submission)
+    //   - Dissemination Method (para lang sa Records Unit/Admin kapag
+    //     inirerelease/dinidisseminate na ang document, hindi sa submission)
+    // Ang Admin/Records Unit (master scope) lang ang may access sa mga field
+    // na ito, dahil sila ang aktwal na nagpoproseso ng mga dokumentong
+    // direkta nilang natatanggap/inii-encode.
+    if ($is_master) {
+        $routing_type = trim($_POST['routing_type'] ?? 'Receive');
+        $tracking_status = trim($_POST['status'] ?? 'Received');
+        $stamped_date = !empty($_POST['stamped_date']) ? $_POST['stamped_date'] : NULL;
+        $stamped_time = !empty($_POST['stamped_time']) ? $_POST['stamped_time'] : NULL;
+        $copy_retained = isset($_POST['copy_retained']) ? 1 : 0;
+        $op_notes = !empty($_POST['op_notes']) ? trim($_POST['op_notes']) : NULL;
+        $dissemination_method = !empty($_POST['dissemination_method']) ? $_POST['dissemination_method'] : NULL;
+    } else {
+        $routing_type = 'Receive';
+        $tracking_status = 'Submitted';
+        $stamped_date = NULL;
+        $stamped_time = NULL;
+        $copy_retained = 0;
+        $op_notes = NULL;
+        $dissemination_method = NULL;
+    }
 
+    // DEPARTMENT: hindi kinukuha mula sa form/browser (walang department field
+    // dito sa modal, at hindi dapat basta trust-in kahit meron man) — kundi
+    // direkta mula sa department ng currently logged-in user na gumawa ng
+    // document. Ito rin ang column na ginagamit ng approvals.php para malaman
+    // kung aling Officer/opisina ang dapat makakita nito sa approval queue.
+    $department = trim($_SESSION['department'] ?? '');
+
+    // RECEIVING STAFF: kaparehong prinsipyo — awtomatikong kinukuha mula sa
+    // session ng naka-login (hindi pina-type ng staff), para malaman kung
+    // sino talaga ang nag-encode/naka-receive ng document na ito.
+    $created_by = intval($_SESSION['user_id']);
+
+    // APPROVAL STATUS: laging "Pending" ang bagong document, hindi kailanman
+    // kinukuha mula sa $_POST — hindi ito settable ng kahit sino sa
+    // submission form (walang field man lang dito para dito)
     $approval_status = 'Pending';
-    
+
     $file_type = 'PDF';
     $file_size = '1.0 MB';
     $file_path = '';
 
     // Handle File Upload kung may in-attach
     if (isset($_FILES['document_file']) && $_FILES['document_file']['error'] === UPLOAD_ERR_OK) {
+        $allowed_extensions = ['pdf', 'docx', 'doc', 'jpg', 'jpeg', 'png'];
+
+        // Extension + AKTWAL na content/MIME + size — hindi na extension lang
+        // ang pinagbabatayan (madaling palitan ng pangalan ng attacker)
+        $upload_error = validate_document_upload($_FILES['document_file'], $allowed_extensions);
+        if ($upload_error !== null) {
+            echo "<script>alert(" . json_encode($upload_error) . "); window.history.back();</script>";
+            exit();
+        }
+
         $file_tmp = $_FILES['document_file']['tmp_name'];
         $original_name = basename($_FILES['document_file']['name']);
         $file_ext_check = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
-
-        $allowed_extensions = ['pdf', 'docx', 'doc', 'jpg', 'jpeg', 'png'];
-        if (!in_array($file_ext_check, $allowed_extensions)) {
-            echo "<script>alert('Invalid file type. Only PDF, DOCX, DOC, JPG, and PNG files are allowed.'); window.history.back();</script>";
-            exit();
-        }
 
         $file_name = time() . '_' . $original_name;
         $upload_dir = 'uploads/';
@@ -61,28 +115,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // Query para sa pag-save kabilang ang mga bagong workflow fields
-    $query = "INSERT INTO documents (title, file_type, file_size, category, classification, routing_type, sender, stamped_date, stamped_time, signatory, is_confidential, copy_retained, op_notes, dissemination_method, tracking_status, approval_status, file_path) 
-              VALUES ('$title', '$file_type', '$file_size', '$category', '$classification', '$routing_type', '$sender', " . 
-              ($stamped_date ? "'$stamped_date'" : "NULL") . ", " . 
-              ($stamped_time ? "'$stamped_time'" : "NULL") . ", " . 
-              ($signatory ? "'$signatory'" : "NULL") . ", " . 
-              "'$is_confidential', '$copy_retained', " . 
-              ($op_notes ? "'$op_notes'" : "NULL") . ", " . 
-              ($dissemination_method ? "'$dissemination_method'" : "NULL") . ", " . 
-              "'$tracking_status', '$approval_status', '$file_path')";
-    
-    if (mysqli_query($conn, $query)) {
+    // Query para sa pag-save kabilang ang mga bagong workflow fields, department,
+    // at created_by, gamit ang prepared statement (dati, escaped raw string
+    // ang ginagamit dito)
+    $query = "INSERT INTO documents (title, file_type, file_size, category, classification, routing_type, sender, department, created_by, stamped_date, stamped_time, signatory, is_confidential, copy_retained, op_notes, dissemination_method, tracking_status, approval_status, file_path)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $stmt = mysqli_prepare($conn, $query);
+    mysqli_stmt_bind_param(
+        $stmt,
+        "ssssssssisssiisssss",
+        $title, $file_type, $file_size, $category, $classification, $routing_type, $sender, $department, $created_by,
+        $stamped_date, $stamped_time, $signatory, $is_confidential, $copy_retained,
+        $op_notes, $dissemination_method, $tracking_status, $approval_status, $file_path
+    );
+
+    if (mysqli_stmt_execute($stmt)) {
         $document_id = mysqli_insert_id($conn);
         $tracking_no = "#REC-2026-" . str_pad($document_id, 4, '0', STR_PAD_LEFT);
-        
+
         $routing_from = $sender;
         $routing_to = "Records Unit";
-        $action_taken = "Received";
+        // Ang unang tracking entry ay dapat sumasalamin sa AKTWAL na napiling
+        // status (hal. "Submitted" kung isang ordinaryong department/staff
+        // account ang gumawa nito, o "Received" kung Records Unit mismo ang
+        // direktang nag-encode) — dati, "Received" lang ang laging naka-log
+        // dito kahit anong status ang aktwal na napili sa form.
+        $action_taken = $tracking_status;
         $processed_by = trim(($_SESSION['firstname'] ?? '') . ' ' . ($_SESSION['lastname'] ?? '')) ?: 'Unknown User';
-        
-        $log_query = "INSERT INTO tracking_logs (document_id, tracking_no, document_title, routing_from, routing_to, action_taken, processed_by) VALUES ('$document_id', '$tracking_no', '$title', '$routing_from', '$routing_to', '$action_taken', '$processed_by')";
-        mysqli_query($conn, $log_query);
+
+        $log_stmt = mysqli_prepare($conn, "INSERT INTO tracking_logs (document_id, tracking_no, document_title, routing_from, routing_to, action_taken, processed_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        mysqli_stmt_bind_param($log_stmt, "issssss", $document_id, $tracking_no, $title, $routing_from, $routing_to, $action_taken, $processed_by);
+        mysqli_stmt_execute($log_stmt);
 
         header("Location: documents.php?success=1");
         exit();

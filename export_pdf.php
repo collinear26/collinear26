@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'db_conn.php';
+include 'document_access.php'; // Centralized confidentiality/authorization check
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
@@ -9,7 +10,20 @@ if (!isset($_SESSION['user_id'])) {
 
 $query = "SELECT * FROM documents ORDER BY id DESC";
 $result = mysqli_query($conn, $query);
-$total_documents = mysqli_num_rows($result);
+
+// Confidential documents na hindi awtorisado ang naka-login na user ay
+// hindi isasama sa report na ito (dati, LAHAT ng documents kasama ang mga
+// CONFIDENTIAL ay basta nailalabas dito kahit sino pa ang naka-login,
+// walang role/department check man lang bago ito).
+$export_rows = [];
+if ($result) {
+    while ($row = mysqli_fetch_assoc($result)) {
+        if (can_access_document($row)) {
+            $export_rows[] = $row;
+        }
+    }
+}
+$total_documents = count($export_rows);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -68,20 +82,23 @@ $total_documents = mysqli_num_rows($result);
             </tr>
         </thead>
         <tbody>
-            <?php if ($result && mysqli_num_rows($result) > 0): ?>
-                <?php while ($row = mysqli_fetch_assoc($result)): ?>
+            <?php if (!empty($export_rows)): ?>
+                <?php foreach ($export_rows as $row): ?>
                     <tr>
-                        <td><strong>#REC-<?php echo $row['id']; ?></strong></td>
-                        <td><?php echo htmlspecialchars($row['title']); ?></td>
+                        <td><strong>#REC-<?php echo (int) $row['id']; ?></strong></td>
+                        <td>
+                            <?php echo htmlspecialchars($row['title']); ?>
+                            <?php if (!empty($row['is_confidential'])): ?> <strong style="color:#991b1b;">[CONFIDENTIAL]</strong><?php endif; ?>
+                        </td>
                         <td><?php echo htmlspecialchars($row['category']); ?></td>
                         <td><?php echo htmlspecialchars($row['sender']); ?></td>
                         <td><?php echo date('M d, Y', strtotime($row['created_at'])); ?></td>
-                        <td><strong><?php echo strtoupper($row['status']); ?></strong></td>
+                        <td><strong><?php echo strtoupper($row['tracking_status'] ?? 'PENDING'); ?></strong></td>
                     </tr>
-                <?php endwhile; ?>
+                <?php endforeach; ?>
             <?php else: ?>
                 <tr>
-                    <td colspan="6" style="text-align: center; color: #64748b;">No records found.</td>
+                    <td colspan="6" style="text-align: center; color: #64748b;">No records found, or no documents you're authorized to view.</td>
                 </tr>
             <?php endif; ?>
         </tbody>

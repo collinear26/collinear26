@@ -1,6 +1,8 @@
 <?php
 session_start();
 include 'db_conn.php';
+include 'csrf.php';
+include 'departments_helper.php';
 
 // Kuhanin ang user_type mula sa session at gawing lowercase para safe sa comparison
 $user_type = isset($_SESSION['user_type']) ? strtolower(trim($_SESSION['user_type'])) : '';
@@ -21,6 +23,9 @@ $offset = ($page - 1) * $limit;
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 $role_filter = isset($_GET['role']) ? trim($_GET['role']) : '';
 $status_filter = isset($_GET['status_filter']) ? trim($_GET['status_filter']) : '';
+
+// Listahan ng mga rehistradong opisina, gagamitin sa Add/Edit User dropdown
+$office_options = get_active_departments($conn);
 
 // Bumuo ng dynamic query para sa Search at Filters
 $where_clauses = [];
@@ -90,6 +95,10 @@ if (isset($_GET['status'])) {
             break;
         case 'duplicate':
             $toast_message = 'Email or ID number already exists. Please use a different one.';
+            $toast_type = 'error';
+            break;
+        case 'weak_password':
+            $toast_message = 'Temporary password must be at least 8 characters.';
             $toast_type = 'error';
             break;
         case 'approved':
@@ -244,11 +253,13 @@ if (isset($_GET['status'])) {
                                             <div style="display: flex; gap: 6px; align-items: center;">
                                                 <?php if ($status === 'pending'): ?>
                                                     <form method="POST" action="process_user_approval.php" style="display: inline;" onsubmit="return confirmUserAction(event, this, 'approve', '<?php echo $safe_fname; ?>');">
+                                                        <?php csrf_field(); ?>
                                                         <input type="hidden" name="user_id" value="<?php echo $safe_id; ?>">
                                                         <input type="hidden" name="action" value="approve">
                                                         <button type="submit" class="btn-approve" title="Approve"><i data-lucide="check" style="width: 14px;"></i></button>
                                                     </form>
                                                     <form method="POST" action="process_user_approval.php" style="display: inline;" onsubmit="return confirmUserAction(event, this, 'reject', '<?php echo $safe_fname; ?>');">
+                                                        <?php csrf_field(); ?>
                                                         <input type="hidden" name="user_id" value="<?php echo $safe_id; ?>">
                                                         <input type="hidden" name="action" value="reject">
                                                         <button type="submit" class="btn-reject" title="Reject"><i data-lucide="x" style="width: 14px;"></i></button>
@@ -296,111 +307,167 @@ if (isset($_GET['status'])) {
     </div>
 
     <!-- POP-UP MODAL FOR ADD USER -->
-    <div id="addUserModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; align-items: center; justify-content: center;">
-        <div style="background: #fff; padding: 28px; border-radius: 14px; width: 460px; max-width: 90%; color: #333; max-height: 90vh; overflow-y: auto;">
-            <h3 style="margin-bottom: 16px; font-size: 18px; font-weight: 600;">Add New System User</h3>
+    <div id="addUserModal" class="modal-overlay" style="display: none;">
+        <div class="modal-panel modal-panel--sm">
+            <div class="modal-header">
+                <div class="modal-header-text"><h3>Add New System User</h3></div>
+                <button type="button" id="closeModalBtn" class="modal-close">&times;</button>
+            </div>
             <form action="add_user.php" method="POST">
-                <div style="margin-bottom: 12px;">
-                    <label style="display:block; margin-bottom: 4px; font-size: 12px; font-weight:600;">First Name</label>
-                    <input type="text" name="firstname" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
+                <?php csrf_field(); ?>
+                <div class="modal-body">
+
+                <div class="modal-section">
+                    <span class="modal-section-title">Personal Information</span>
+                    <div class="modal-grid-2">
+                        <div class="modal-field">
+                            <label>First Name</label>
+                            <input type="text" name="firstname" required>
+                        </div>
+                        <div class="modal-field">
+                            <label>Last Name</label>
+                            <input type="text" name="lastname" required>
+                        </div>
+                    </div>
+                    <div class="modal-field">
+                        <label>ID Number</label>
+                        <input type="text" name="id_number" placeholder="e.g., 2026-0001" required>
+                    </div>
                 </div>
-                <div style="margin-bottom: 12px;">
-                    <label style="display:block; margin-bottom: 4px; font-size: 12px; font-weight:600;">Last Name</label>
-                    <input type="text" name="lastname" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
+
+                <div class="modal-section">
+                    <span class="modal-section-title">Account Details</span>
+                    <div class="modal-field">
+                        <label>Email Address</label>
+                        <input type="email" name="email" required>
+                    </div>
+                    <div class="modal-field">
+                        <label>Department / Office</label>
+                        <select name="department" id="add_department_select" onchange="toggleDeptOther(this, 'add_department_other')" required>
+                            <option value="" disabled selected>Select Office</option>
+                            <?php foreach ($office_options as $office): ?>
+                                <option value="<?php echo htmlspecialchars($office['name']); ?>"><?php echo htmlspecialchars($office['name']); ?></option>
+                            <?php endforeach; ?>
+                            <option value="__other__">+ Other (register new office)</option>
+                        </select>
+                        <input type="text" name="department_other" id="add_department_other" placeholder="Type the new office name" style="display:none; margin-top:8px;">
+                    </div>
+                    <div class="modal-field">
+                        <label>Temporary Password</label>
+                        <input type="password" name="password" placeholder="••••••••" required>
+                    </div>
                 </div>
-                <div style="margin-bottom: 12px;">
-                    <label style="display:block; margin-bottom: 4px; font-size: 12px; font-weight:600;">ID Number</label>
-                    <input type="text" name="id_number" placeholder="e.g., 2026-0001" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
+
+                <div class="modal-section">
+                    <span class="modal-section-title">Access & Status</span>
+                    <div class="modal-grid-2">
+                        <div class="modal-field">
+                            <label>Role (User Type)</label>
+                            <select name="user_type">
+                                <option value="staff">Staff / Viewer</option>
+                                <option value="officer">Records Officer</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                        <div class="modal-field">
+                            <label>Account Status</label>
+                            <select name="account_status">
+                                <option value="active">Active</option>
+                                <option value="pending">Pending</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
-                <div style="margin-bottom: 12px;">
-                    <label style="display:block; margin-bottom: 4px; font-size: 12px; font-weight:600;">Email Address</label>
-                    <input type="email" name="email" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
+
                 </div>
-                <div style="margin-bottom: 12px;">
-                    <label style="display:block; margin-bottom: 4px; font-size: 12px; font-weight:600;">Department / Office</label>
-                    <input type="text" name="department" placeholder="e.g., SIT - BSIT" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
-                </div>
-                <div style="margin-bottom: 12px;">
-                    <label style="display:block; margin-bottom: 4px; font-size: 12px; font-weight:600;">Temporary Password</label>
-                    <input type="password" name="password" placeholder="••••••••" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
-                </div>
-                <div style="margin-bottom: 12px;">
-                    <label style="display:block; margin-bottom: 4px; font-size: 12px; font-weight:600;">Role (User Type)</label>
-                    <select name="user_type" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
-                        <option value="staff">Staff / Viewer</option>
-                        <option value="officer">Records Officer</option>
-                        <option value="admin">Admin</option>
-                    </select>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <label style="display:block; margin-bottom: 4px; font-size: 12px; font-weight:600;">Account Status</label>
-                    <select name="account_status" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
-                        <option value="active">Active</option>
-                        <option value="pending">Pending</option>
-                        <option value="inactive">Inactive</option>
-                    </select>
-                </div>
-                <div style="display: flex; justify-content: flex-end; gap: 8px;">
-                    <button type="button" id="closeModalBtn" class="secondary-btn" style="padding: 8px 16px; border-radius: 6px; cursor: pointer;">Cancel</button>
-                    <button type="submit" class="primary-btn" style="padding: 8px 16px; border-radius: 6px; cursor: pointer;">Save Account</button>
+                <div class="modal-footer">
+                    <button type="button" id="closeModalBtn" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Cancel</button>
+                    <button type="submit" class="modal-btn modal-btn-primary"><i data-lucide="check"></i> Save Account</button>
                 </div>
             </form>
         </div>
     </div>
 
     <!-- POP-UP MODAL FOR EDIT USER -->
-    <div id="editUserModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; align-items: center; justify-content: center;">
-        <div style="background: #fff; padding: 28px; border-radius: 14px; width: 460px; max-width: 90%; color: #333; max-height: 90vh; overflow-y: auto;">
-            <h3 style="margin-bottom: 16px; font-size: 18px; font-weight: 600;">Edit System User</h3>
+    <div id="editUserModal" class="modal-overlay" style="display: none;">
+        <div class="modal-panel modal-panel--sm">
+            <div class="modal-header">
+                <div class="modal-header-text"><h3>Edit System User <strong id="edit_id_number_badge" class="modal-badge"></strong></h3></div>
+                <button type="button" id="closeEditModalBtn" class="modal-close">&times;</button>
+            </div>
             <form action="edit_user.php" method="POST">
+                <?php csrf_field(); ?>
                 <input type="hidden" name="user_id" id="edit_user_id">
-                
-                <div style="margin-bottom: 12px;">
-                    <label style="display:block; margin-bottom: 4px; font-size: 12px; font-weight:600;">First Name</label>
-                    <input type="text" name="firstname" id="edit_firstname" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
-                </div>
-                <div style="margin-bottom: 12px;">
-                    <label style="display:block; margin-bottom: 4px; font-size: 12px; font-weight:600;">Last Name</label>
-                    <input type="text" name="lastname" id="edit_lastname" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
-                </div>
-                <div style="margin-bottom: 12px;">
-                    <label style="display:block; margin-bottom: 4px; font-size: 12px; font-weight:600;">ID Number</label>
-                    <input type="text" name="id_number" id="edit_id_number" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
-                </div>
-                <div style="margin-bottom: 12px;">
-                    <label style="display:block; margin-bottom: 4px; font-size: 12px; font-weight:600;">Email Address</label>
-                    <input type="email" name="email" id="edit_email" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
-                </div>
-                <div style="margin-bottom: 12px;">
-                    <label style="display:block; margin-bottom: 4px; font-size: 12px; font-weight:600;">Department / Office</label>
-                    <input type="text" name="department" id="edit_department" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
-                </div>
-                
-                <div style="margin-bottom: 12px;">
-                    <label style="display:block; margin-bottom: 4px; font-size: 12px; font-weight:600;">New Password <span style="font-weight:normal; color:#64748b;">(Leave blank to keep current)</span></label>
-                    <input type="password" name="password" placeholder="••••••••" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
+                <div class="modal-body">
+
+                <div class="modal-section">
+                    <span class="modal-section-title">Personal Information</span>
+                    <div class="modal-grid-2">
+                        <div class="modal-field">
+                            <label>First Name</label>
+                            <input type="text" name="firstname" id="edit_firstname" required>
+                        </div>
+                        <div class="modal-field">
+                            <label>Last Name</label>
+                            <input type="text" name="lastname" id="edit_lastname" required>
+                        </div>
+                    </div>
+                    <div class="modal-field">
+                        <label>ID Number</label>
+                        <input type="text" name="id_number" id="edit_id_number" required>
+                    </div>
                 </div>
 
-                <div style="margin-bottom: 12px;">
-                    <label style="display:block; margin-bottom: 4px; font-size: 12px; font-weight:600;">Role (User Type)</label>
-                    <select name="user_type" id="edit_user_type" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
-                        <option value="staff">Staff / Viewer</option>
-                        <option value="officer">Records Officer</option>
-                        <option value="admin">Admin</option>
-                    </select>
+                <div class="modal-section">
+                    <span class="modal-section-title">Account Details</span>
+                    <div class="modal-field">
+                        <label>Email Address</label>
+                        <input type="email" name="email" id="edit_email" required>
+                    </div>
+                    <div class="modal-field">
+                        <label>Department / Office</label>
+                        <select name="department" id="edit_department" onchange="toggleDeptOther(this, 'edit_department_other')" required>
+                            <option value="" disabled>Select Office</option>
+                            <?php foreach ($office_options as $office): ?>
+                                <option value="<?php echo htmlspecialchars($office['name']); ?>"><?php echo htmlspecialchars($office['name']); ?></option>
+                            <?php endforeach; ?>
+                            <option value="__other__">+ Other (register new office)</option>
+                        </select>
+                        <input type="text" name="department_other" id="edit_department_other" placeholder="Type the new office name" style="display:none; margin-top:8px;">
+                    </div>
+                    <div class="modal-field">
+                        <label>New Password <span class="hint">(Leave blank to keep current)</span></label>
+                        <input type="password" name="password" placeholder="••••••••">
+                    </div>
                 </div>
-                <div style="margin-bottom: 16px;">
-                    <label style="display:block; margin-bottom: 4px; font-size: 12px; font-weight:600;">Account Status</label>
-                    <select name="account_status" id="edit_account_status" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
-                        <option value="active">Active</option>
-                        <option value="pending">Pending</option>
-                        <option value="inactive">Inactive</option>
-                    </select>
+
+                <div class="modal-section">
+                    <span class="modal-section-title">Access & Status</span>
+                    <div class="modal-grid-2">
+                        <div class="modal-field">
+                            <label>Role (User Type)</label>
+                            <select name="user_type" id="edit_user_type">
+                                <option value="staff">Staff / Viewer</option>
+                                <option value="officer">Records Officer</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                        <div class="modal-field">
+                            <label>Account Status</label>
+                            <select name="account_status" id="edit_account_status">
+                                <option value="active">Active</option>
+                                <option value="pending">Pending</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
-                
-                <div style="display: flex; justify-content: flex-end; gap: 8px;">
-                    <button type="button" id="closeEditModalBtn" class="secondary-btn" style="padding: 8px 16px; border-radius: 6px; cursor: pointer;">Cancel</button>
-                    <button type="submit" class="primary-btn" style="padding: 8px 16px; border-radius: 6px; cursor: pointer;">Update Account</button>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" id="closeEditModalBtn" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Cancel</button>
+                    <button type="submit" class="modal-btn modal-btn-primary"><i data-lucide="check"></i> Update Account</button>
                 </div>
             </form>
         </div>
@@ -429,13 +496,43 @@ if (isset($_GET['status'])) {
         const editModal = document.getElementById('editUserModal');
         const closeEditBtn = document.getElementById('closeEditModalBtn');
 
+        // Ipakita ang "type new office" text field kapag "+ Other" ang pinili
+        // sa Department dropdown (Add o Edit User)
+        function toggleDeptOther(selectEl, otherInputId) {
+            const otherInput = document.getElementById(otherInputId);
+            if (selectEl.value === '__other__') {
+                otherInput.style.display = 'block';
+                otherInput.focus();
+            } else {
+                otherInput.style.display = 'none';
+                otherInput.value = '';
+            }
+        }
+
         function openEditModal(id, firstname, lastname, email, idNumber, department, userType, status) {
             document.getElementById('edit_user_id').value = id;
             document.getElementById('edit_firstname').value = firstname;
             document.getElementById('edit_lastname').value = lastname;
             document.getElementById('edit_id_number').value = idNumber;
+            document.getElementById('edit_id_number_badge').innerText = idNumber || '';
             document.getElementById('edit_email').value = email;
-            document.getElementById('edit_department').value = department;
+
+            // Piliin ang department sa dropdown kung kabilang ito sa listahan;
+            // kung hindi (hal. lumang record na may kakaibang baybay), gamitin
+            // ang "Other" option at ipakita ang aktwal na pangalan sa text field
+            const deptSelect = document.getElementById('edit_department');
+            const deptOtherInput = document.getElementById('edit_department_other');
+            const matchingOption = Array.from(deptSelect.options).find(opt => opt.value === department);
+            if (matchingOption) {
+                deptSelect.value = department;
+                deptOtherInput.style.display = 'none';
+                deptOtherInput.value = '';
+            } else {
+                deptSelect.value = '__other__';
+                deptOtherInput.style.display = 'block';
+                deptOtherInput.value = department;
+            }
+
             document.getElementById('edit_user_type').value = userType;
             document.getElementById('edit_account_status').value = status ? status.toLowerCase() : 'active';
             

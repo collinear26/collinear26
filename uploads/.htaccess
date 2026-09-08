@@ -1,13 +1,12 @@
-# Ilagay ang file na ito sa loob ng uploads/ folder, palitan ang pangalan ng
-# ".htaccess" (walang extension). Pinipigilan nito na ma-execute bilang PHP
-# ang kahit anong file dito, kahit paano pa ito na-upload.
-
-<FilesMatch "\.(php|php\d|phtml|phar|pl|py|cgi|asp|aspx|sh)$">
-    Require all denied
-</FilesMatch>
+# SECURITY: Tinatanggihan ang LAHAT ng direktang HTTP access sa folder na ito
+# (hindi lang script execution) — ang tanging paraan na dapat makakuha ng file
+# dito ay sa pamamagitan ng download_doc.php, na nagsasagawa ng authorization
+# check (confidentiality + department scope) BAGO ilabas ang kahit anong file.
+# Kahit maalaman ng isang tao ang eksaktong filename, hindi na ito direktang
+# ma-access sa browser — dahil dito, hindi na rin kailangan ng hiwalay na
+# script-extension-only na rule, kasama na ito sa full deny.
+Require all denied
 
 # Alternative syntax para sa mas lumang Apache (uncomment kung hindi gumana ang taas):
-# <FilesMatch "\.(php|php\d|phtml|phar|pl|py|cgi|asp|aspx|sh)$">
-#     Order Deny,Allow
-#     Deny from all
-# </FilesMatch>
+# Order Deny,Allow
+# Deny from all

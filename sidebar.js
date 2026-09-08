@@ -8,6 +8,48 @@ document.addEventListener('DOMContentLoaded', () => {
     const collapseBtn = document.getElementById('toggleSidebar');
     const htmlEl = document.documentElement;
     const navMenu = document.getElementById('sidebarNavMenu');
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+    const MOBILE_BREAKPOINT = 768; // dapat tugma sa @media (max-width: 768px) sa style.css
+    const isMobileViewport = () => window.innerWidth <= MOBILE_BREAKPOINT;
+
+    // MOBILE DRAWER: bukas/sara ng off-canvas sidebar sa maliit na screen
+    function openMobileSidebar() {
+        sidebar.classList.add('mobile-open');
+        sidebarBackdrop.classList.add('visible');
+    }
+    function closeMobileSidebar() {
+        sidebar.classList.remove('mobile-open');
+        sidebarBackdrop.classList.remove('visible');
+    }
+
+    if (mobileMenuBtn && sidebar && sidebarBackdrop) {
+        mobileMenuBtn.addEventListener('click', () => {
+            if (sidebar.classList.contains('mobile-open')) {
+                closeMobileSidebar();
+            } else {
+                openMobileSidebar();
+            }
+        });
+
+        sidebarBackdrop.addEventListener('click', closeMobileSidebar);
+
+        // Isara ang drawer pagkatapos pumili ng nav item (mas madaling makita
+        // ang bagong page sa halip na natatakpan pa rin ito ng sidebar)
+        if (navMenu) {
+            navMenu.querySelectorAll('.nav-item').forEach((link) => {
+                link.addEventListener('click', () => {
+                    if (isMobileViewport()) closeMobileSidebar();
+                });
+            });
+        }
+
+        // Kung lumaki ulit ang window pabalik sa desktop width habang bukas
+        // ang mobile drawer, i-reset ito para hindi na ma-stuck sa "open" state
+        window.addEventListener('resize', () => {
+            if (!isMobileViewport()) closeMobileSidebar();
+        });
+    }
 
     // 2. SIDEBAR TOGGLE & COLLAPSE STATE
     if (collapseBtn && sidebar) {
@@ -24,6 +66,15 @@ document.addEventListener('DOMContentLoaded', () => {
         collapseBtn.addEventListener('click', () => {
             if (isAnimating) return;
             isAnimating = true;
+
+            // Sa mobile, ibang gamit ang parehong button: isinasara na lang
+            // nito ang buong drawer sa halip na i-toggle ang icon-only mode
+            // (walang silbi ang collapse-to-icons kung naka-overlay na ito)
+            if (isMobileViewport()) {
+                closeMobileSidebar();
+                setTimeout(() => { isAnimating = false; }, 250);
+                return;
+            }
 
             // I-toggle ang collapsed class sa sidebar
             sidebar.classList.toggle('collapsed');

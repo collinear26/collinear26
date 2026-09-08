@@ -1,5 +1,6 @@
 <?php
 session_start();
+include 'csrf.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
@@ -196,6 +197,7 @@ if (isset($_GET['pw_status'])) {
                 <div class="card">
                     <div class="card-title"><i data-lucide="lock" style="width: 18px;"></i> Security & Password</div>
                     <form action="update_password.php" method="POST" id="passwordForm">
+                        <?php csrf_field(); ?>
                         <div class="form-grid">
                             <div class="form-group full-width">
                                 <label>Current Password</label>

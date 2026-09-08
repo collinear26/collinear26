@@ -1,24 +1,44 @@
 <?php
 session_start();
 include 'db_conn.php';
+include 'document_access.php'; // Centralized confidentiality/authorization check
+include 'csrf.php';
+include 'departments_helper.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
 }
 
+$is_master = is_master_scope_user();
+$my_department = trim($_SESSION['department'] ?? '');
+
 // Kunin at i-sanitize ang mga filter values mula sa URL (GET)
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 $category = isset($_GET['category']) ? trim($_GET['category']) : '';
 $status = isset($_GET['status']) ? trim($_GET['status']) : '';
 
-// Buuin ang WHERE clause para sa Prepared Statements
+// Buuin ang WHERE clause para sa Prepared Statements (naka-prefix na ng "d."
+// dahil may LEFT JOIN na ngayon sa users para makuha ang "Encoded By")
 $where_clauses = array();
 $params = array();
 $types = "";
 
+// DEPARTMENT-SCOPED ACCESS: kung hindi Master scope (Admin/Records Unit) ang
+// naka-login, ilimita ang buong Documents list sa sarili niyang submissions
+// (created_by) AT department queue lang — hindi na niya makikita ang buong
+// master list ng ibang departments. Ito ay based lang sa SESSION, hindi sa
+// kahit anong GET/POST value, kaya walang paraan para makakita ng ibang
+// department sa pamamagitan ng pagpalit ng URL.
+$doc_scope = scoped_document_clause('d');
+if ($doc_scope['clause'] !== '') {
+    $where_clauses[] = $doc_scope['clause'];
+    foreach ($doc_scope['params'] as $p) { $params[] = $p; }
+    $types .= $doc_scope['types'];
+}
+
 if (!empty($search)) {
-    $where_clauses[] = "(id LIKE ? OR title LIKE ? OR sender LIKE ?)";
+    $where_clauses[] = "(d.id LIKE ? OR d.title LIKE ? OR d.sender LIKE ?)";
     $search_param = "%" . $search . "%";
     $params[] = $search_param;
     $params[] = $search_param;
@@ -27,13 +47,13 @@ if (!empty($search)) {
 }
 
 if (!empty($category)) {
-    $where_clauses[] = "category = ?";
+    $where_clauses[] = "d.category = ?";
     $params[] = $category;
     $types .= "s";
 }
 
 if (!empty($status)) {
-    $where_clauses[] = "tracking_status = ?";
+    $where_clauses[] = "d.tracking_status = ?";
     $params[] = $status;
     $types .= "s";
 }
@@ -49,7 +69,7 @@ $page = isset($_GET['page']) ? intval($_GET['page']) : 1;
 $offset = ($page - 1) * $limit;
 
 // Bilangin ang total documents batay sa filter gamit ang prepared statement
-$total_query = "SELECT COUNT(*) as total FROM documents $where_sql";
+$total_query = "SELECT COUNT(*) as total FROM documents d $where_sql";
 $total_stmt = mysqli_prepare($conn, $total_query);
 if (!empty($types)) {
     mysqli_stmt_bind_param($total_stmt, $types, ...$params);
@@ -60,8 +80,13 @@ $total_row = mysqli_fetch_assoc($total_result);
 $total_documents = $total_row['total'] ?? 0;
 $total_pages = ceil($total_documents / $limit);
 
-// Kunin ang mga dokumento para sa kasalukuyang pahina gamit ang prepared statement
-$query = "SELECT * FROM documents $where_sql ORDER BY id DESC LIMIT ? OFFSET ?";
+// Kunin ang mga dokumento para sa kasalukuyang pahina gamit ang prepared statement.
+// May LEFT JOIN sa users para makuha kung sinong staff ang nag-encode/receive
+// (created_by) — "Encoded By" sa View modal.
+$query = "SELECT d.*, TRIM(CONCAT(COALESCE(cu.firstname,''), ' ', COALESCE(cu.lastname,''))) AS creator_name
+          FROM documents d
+          LEFT JOIN users cu ON d.created_by = cu.id
+          $where_sql ORDER BY d.id DESC LIMIT ? OFFSET ?";
 $stmt = mysqli_prepare($conn, $query);
 
 // Idagdag ang limit at offset sa parameters
@@ -72,6 +97,10 @@ $types .= "ii";
 mysqli_stmt_bind_param($stmt, $types, ...$params);
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
+
+// Listahan ng mga rehistradong opisina, gagamitin bilang mga pipiliang
+// opisina/recipient sa Release/Disseminate modal
+$known_departments = array_map(function ($d) { return $d['name']; }, get_active_departments($conn));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -104,7 +133,13 @@ $result = mysqli_stmt_get_result($stmt);
             <div class="top-header">
                 <div class="page-title">
                     <h1>Document Management</h1>
-                    <p>Track, manage, and process all institutional records</p>
+                    <p>
+                        <?php if ($is_master): ?>
+                            Track, manage, and process all institutional records
+                        <?php else: ?>
+                            Showing only your own submissions and documents routed to <strong><?php echo htmlspecialchars($my_department ?: 'your office'); ?></strong>
+                        <?php endif; ?>
+                    </p>
                 </div>
                 <div class="header-actions">
                     <button class="primary-btn"><i data-lucide="plus" style="width: 14px;"></i> New Document</button>
@@ -127,15 +162,27 @@ $result = mysqli_stmt_get_result($stmt);
 
                             <select name="category" class="filter-select" onchange="this.form.submit()" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: #fff;">
                                 <option value="">All Categories</option>
-                                <option value="Memo" <?php echo ($category === 'Memo') ? 'selected' : ''; ?>>Memo</option>
-                                <option value="Financial Request" <?php echo ($category === 'Financial Request') ? 'selected' : ''; ?>>Financial Request</option>
-                                <option value="Travel Order" <?php echo ($category === 'Travel Order') ? 'selected' : ''; ?>>Travel Order</option>
+                                <?php
+                                    // Kunin ang document types mula mismo sa Categories module (dati,
+                                    // 3 lang na hardcoded na option ang laging nakalagay dito kahit
+                                    // may mga bago nang idinagdag sa categories.php)
+                                    $filter_cats_result = mysqli_query($conn, "SELECT name FROM categories ORDER BY name ASC");
+                                    if ($filter_cats_result) {
+                                        while ($fc = mysqli_fetch_assoc($filter_cats_result)) {
+                                            $sel = ($category === $fc['name']) ? 'selected' : '';
+                                            echo '<option value="' . htmlspecialchars($fc['name']) . '" ' . $sel . '>' . htmlspecialchars($fc['name']) . '</option>';
+                                        }
+                                    }
+                                ?>
                             </select>
 
                             <select name="status" class="filter-select" onchange="this.form.submit()" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: #fff;">
                                 <option value="">All Tracking Status</option>
+                                <option value="Submitted" <?php echo ($status === 'Submitted') ? 'selected' : ''; ?>>Submitted</option>
                                 <option value="Received" <?php echo ($status === 'Received') ? 'selected' : ''; ?>>Received</option>
                                 <option value="Pending" <?php echo ($status === 'Pending') ? 'selected' : ''; ?>>Pending</option>
+                                <option value="Released" <?php echo ($status === 'Released') ? 'selected' : ''; ?>>Released</option>
+                                <option value="Completed" <?php echo ($status === 'Completed') ? 'selected' : ''; ?>>Completed</option>
                                 <option value="Overdue" <?php echo ($status === 'Overdue') ? 'selected' : ''; ?>>Overdue</option>
                             </select>
 
@@ -191,11 +238,14 @@ $result = mysqli_stmt_get_result($stmt);
                                         </td>
                                         <td><?php echo isset($row['created_at']) ? date('M d, Y', strtotime($row['created_at'])) : ''; ?></td>
                                         <td>
-                                            <?php 
+                                            <?php
                                                 $row_status = strtolower($row['tracking_status'] ?? 'pending');
                                                 $badge_class = 'status-pending';
                                                 if ($row_status === 'received') $badge_class = 'status-received';
                                                 if ($row_status === 'overdue') $badge_class = 'status-overdue';
+                                                if ($row_status === 'released') $badge_class = 'status-released';
+                                                if ($row_status === 'submitted') $badge_class = 'status-submitted';
+                                                if ($row_status === 'completed') $badge_class = 'status-completed';
                                             ?>
                                             <span class="status-badge <?php echo $badge_class; ?>"><?php echo ucfirst($row_status); ?></span>
                                         </td>
@@ -209,37 +259,53 @@ $result = mysqli_stmt_get_result($stmt);
                                             <span class="badge <?php echo $approval_class; ?>"><?php echo ucfirst($approval); ?></span>
                                         </td>
                                         <td>
-                                            <div class="action-btns" style="justify-content: flex-end;" onclick="event.stopPropagation();">
-                                                <!-- View Button -->
-                                                <button type="button" class="action-icon-btn btn-view" title="View" 
-                                                    data-id="<?php echo $row['id']; ?>" 
-                                                    data-title="<?php echo htmlspecialchars($row['title']); ?>" 
-                                                    data-category="<?php echo htmlspecialchars($row['category']); ?>" 
-                                                    data-classification="<?php echo htmlspecialchars($row['classification'] ?? 'Internal'); ?>"
-                                                    data-routing="<?php echo htmlspecialchars($row['routing_type'] ?? 'Receive'); ?>"
-                                                    data-sender="<?php echo htmlspecialchars($row['sender']); ?>" 
-                                                    data-stamped-date="<?php echo htmlspecialchars($row['stamped_date'] ?? ''); ?>"
-                                                    data-stamped-time="<?php echo htmlspecialchars($row['stamped_time'] ?? ''); ?>"
-                                                    data-signatory="<?php echo htmlspecialchars($row['signatory'] ?? ''); ?>"
-                                                    data-confidential="<?php echo htmlspecialchars($row['is_confidential'] ?? '0'); ?>"
-                                                    data-copy-retained="<?php echo htmlspecialchars($row['copy_retained'] ?? '0'); ?>"
-                                                    data-op-notes="<?php echo htmlspecialchars($row['op_notes'] ?? ''); ?>"
-                                                    data-dissemination-method="<?php echo htmlspecialchars($row['dissemination_method'] ?? ''); ?>"
-                                                    data-status="<?php echo htmlspecialchars($row['tracking_status']); ?>">
-                                                    <i data-lucide="eye" style="width:14px;"></i>
+                                            <?php $can_access = can_access_document($row); ?>
+                                            <div class="row-actions" onclick="event.stopPropagation();">
+                                                <button type="button" class="row-actions-toggle" title="More actions">
+                                                    <i data-lucide="more-vertical"></i>
                                                 </button>
+                                                <div class="row-actions-menu">
+                                                <?php if ($can_access): ?>
+                                                    <!-- View Button -->
+                                                    <button type="button" class="row-actions-item btn-view" title="View"
+                                                        data-id="<?php echo $row['id']; ?>"
+                                                        data-title="<?php echo htmlspecialchars($row['title']); ?>"
+                                                        data-category="<?php echo htmlspecialchars($row['category']); ?>"
+                                                        data-classification="<?php echo htmlspecialchars($row['classification'] ?? 'Internal'); ?>"
+                                                        data-routing="<?php echo htmlspecialchars($row['routing_type'] ?? 'Receive'); ?>"
+                                                        data-sender="<?php echo htmlspecialchars($row['sender']); ?>"
+                                                        data-stamped-date="<?php echo htmlspecialchars($row['stamped_date'] ?? ''); ?>"
+                                                        data-stamped-time="<?php echo htmlspecialchars($row['stamped_time'] ?? ''); ?>"
+                                                        data-signatory="<?php echo htmlspecialchars($row['signatory'] ?? ''); ?>"
+                                                        data-confidential="<?php echo htmlspecialchars($row['is_confidential'] ?? '0'); ?>"
+                                                        data-copy-retained="<?php echo htmlspecialchars($row['copy_retained'] ?? '0'); ?>"
+                                                        data-op-notes="<?php echo htmlspecialchars($row['op_notes'] ?? ''); ?>"
+                                                        data-dissemination-method="<?php echo htmlspecialchars($row['dissemination_method'] ?? ''); ?>"
+                                                        data-status="<?php echo htmlspecialchars($row['tracking_status']); ?>"
+                                                        data-encoded-by="<?php echo htmlspecialchars($row['creator_name'] ?: 'Unknown'); ?>"
+                                                        data-department="<?php echo htmlspecialchars($row['department'] ?? ''); ?>">
+                                                        <i data-lucide="eye"></i> View
+                                                    </button>
 
-                                                <a href="download_doc.php?id=<?php echo $row['id']; ?>" class="action-icon-btn" title="Download"><i data-lucide="download" style="width:14px;"></i></a>
+                                                    <a href="download_doc.php?id=<?php echo $row['id']; ?>" target="_blank" rel="noopener" class="row-actions-item" title="View / Download"><i data-lucide="eye"></i> View / Download</a>
+                                                <?php else: ?>
+                                                    <!-- Confidential document, hindi kabilang sa department ng naka-login:
+                                                         hindi lang tinatago ang button — hindi rin tinuturo/inilalabas
+                                                         ng server ang detalyadong content (op_notes, signatory, file). -->
+                                                    <button type="button" class="row-actions-item" title="Restricted — confidential document outside your department" disabled>
+                                                        <i data-lucide="lock"></i> Restricted
+                                                    </button>
+                                                <?php endif; ?>
 
                                                 <?php if (strtolower(trim($_SESSION['user_type'] ?? '')) === 'admin'): ?>
                                                     <!-- Edit Button -->
-                                                    <button type="button" class="action-icon-btn btn-edit" title="Edit" 
-                                                        data-id="<?php echo $row['id']; ?>" 
-                                                        data-title="<?php echo htmlspecialchars($row['title']); ?>" 
-                                                        data-category="<?php echo htmlspecialchars($row['category']); ?>" 
+                                                    <button type="button" class="row-actions-item btn-edit" title="Edit"
+                                                        data-id="<?php echo $row['id']; ?>"
+                                                        data-title="<?php echo htmlspecialchars($row['title']); ?>"
+                                                        data-category="<?php echo htmlspecialchars($row['category']); ?>"
                                                         data-classification="<?php echo htmlspecialchars($row['classification'] ?? 'Internal'); ?>"
                                                         data-routing="<?php echo htmlspecialchars($row['routing_type'] ?? 'Receive'); ?>"
-                                                        data-sender="<?php echo htmlspecialchars($row['sender']); ?>" 
+                                                        data-sender="<?php echo htmlspecialchars($row['sender']); ?>"
                                                         data-stamped-date="<?php echo htmlspecialchars($row['stamped_date'] ?? ''); ?>"
                                                         data-stamped-time="<?php echo htmlspecialchars($row['stamped_time'] ?? ''); ?>"
                                                         data-signatory="<?php echo htmlspecialchars($row['signatory'] ?? ''); ?>"
@@ -248,16 +314,28 @@ $result = mysqli_stmt_get_result($stmt);
                                                         data-op-notes="<?php echo htmlspecialchars($row['op_notes'] ?? ''); ?>"
                                                         data-dissemination-method="<?php echo htmlspecialchars($row['dissemination_method'] ?? ''); ?>"
                                                         data-status="<?php echo htmlspecialchars($row['tracking_status']); ?>">
-                                                        <i data-lucide="edit-2" style="width:14px;"></i>
+                                                        <i data-lucide="edit-2"></i> Edit
+                                                    </button>
+
+                                                    <?php if ($row_status === 'submitted'): ?>
+                                                        <button type="button" class="row-actions-item" title="Receive (Records Unit acknowledges custody)" onclick="openReceiveModal(<?php echo (int) $row['id']; ?>, '<?php echo htmlspecialchars($row['title'] ?? '', ENT_QUOTES); ?>', '<?php echo htmlspecialchars($row['department'] ?? '', ENT_QUOTES); ?>')" style="color: #166534;">
+                                                            <i data-lucide="inbox"></i> Receive
+                                                        </button>
+                                                    <?php endif; ?>
+
+                                                    <button type="button" class="row-actions-item" title="Release / Disseminate" onclick="openReleaseModal(<?php echo (int) $row['id']; ?>)" style="color: #1d4ed8;">
+                                                        <i data-lucide="send"></i> Release / Disseminate
                                                     </button>
 
                                                     <form method="POST" action="archive_document.php" class="inline-approval-form" id="archive-form-<?php echo $row['id']; ?>">
+                                                        <?php csrf_field(); ?>
                                                         <input type="hidden" name="id" value="<?php echo $row['id']; ?>">
-                                                        <button type="button" class="action-icon-btn" title="Archive" onclick="openArchiveModal('archive-form-<?php echo $row['id']; ?>')" style="color: #d97706; background: none; border: none; cursor: pointer;">
-                                                            <i data-lucide="archive" style="width:14px;"></i>
+                                                        <button type="button" class="row-actions-item" title="Archive" onclick="openArchiveModal('archive-form-<?php echo $row['id']; ?>')" style="color: #d97706;">
+                                                            <i data-lucide="archive"></i> Archive
                                                         </button>
                                                     </form>
                                                 <?php endif; ?>
+                                                </div>
                                             </div>
                                         </td>
                                     </tr>
@@ -330,306 +408,446 @@ $result = mysqli_stmt_get_result($stmt);
     </style>
     
     <!-- MODAL PARA SA NEW DOCUMENT (KASAMA NA ANG WORKFLOW FIELDS) -->
-    <div id="newDocumentModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
-        <div class="modal-card" style="background: white; padding: 24px; border-radius: 12px; width: 500px; max-width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <h3 style="margin: 0; font-size: 18px; color: #0f172a;">Add New Document</h3>
-                <button type="button" onclick="closeModal()" style="background: none; border: none; font-size: 18px; cursor: pointer; color: #64748b;">&times;</button>
+    <div id="newDocumentModal" class="modal-overlay" style="display: none;">
+        <div class="modal-panel modal-panel--md">
+            <div class="modal-header">
+                <div class="modal-header-text"><h3>Add New Document</h3></div>
+                <button type="button" onclick="closeModal()" class="modal-close">&times;</button>
             </div>
             <form action="insert_document.php" method="POST" enctype="multipart/form-data">
-                
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Document Title</label>
-                    <input type="text" name="title" required maxlength="150" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
-                </div>
+                <?php csrf_field(); ?>
+                <div class="modal-body">
 
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Category</label>
-                    <select name="category" required style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
-                        <?php
-                            $cat_dropdown_result = mysqli_query($conn, "SELECT name FROM categories ORDER BY name ASC");
-                            if ($cat_dropdown_result && mysqli_num_rows($cat_dropdown_result) > 0) {
-                                while ($cat_row = mysqli_fetch_assoc($cat_dropdown_result)) {
-                                    echo '<option value="' . htmlspecialchars($cat_row['name']) . '">' . htmlspecialchars($cat_row['name']) . '</option>';
+                <div class="modal-section">
+                    <span class="modal-section-title">Document Details</span>
+                    <div class="modal-field">
+                        <label>Document Title</label>
+                        <input type="text" name="title" required maxlength="150">
+                    </div>
+                    <div class="modal-field">
+                        <label>Category</label>
+                        <select name="category" required>
+                            <?php
+                                $cat_dropdown_result = mysqli_query($conn, "SELECT name FROM categories ORDER BY name ASC");
+                                if ($cat_dropdown_result && mysqli_num_rows($cat_dropdown_result) > 0) {
+                                    while ($cat_row = mysqli_fetch_assoc($cat_dropdown_result)) {
+                                        echo '<option value="' . htmlspecialchars($cat_row['name']) . '">' . htmlspecialchars($cat_row['name']) . '</option>';
+                                    }
+                                } else {
+                                    echo '<option value="" disabled>No categories yet — add one in Categories</option>';
                                 }
-                            } else {
-                                echo '<option value="" disabled>No categories yet — add one in Categories</option>';
-                            }
-                        ?>
-                    </select>
-                </div>
-
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-                    <div>
-                        <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Classification</label>
-                        <select name="classification" required style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
-                            <option value="Internal">Internal</option>
-                            <option value="External">External</option>
+                            ?>
                         </select>
                     </div>
-                    <div>
-                        <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Routing Type</label>
-                        <select name="routing_type" required style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
-                            <option value="Receive">Receive (Incoming)</option>
-                            <option value="Release">Release (Outgoing)</option>
+                    <div style="display: grid; grid-template-columns: <?php echo $is_master ? '1fr 1fr' : '1fr'; ?>; gap: 14px;">
+                        <div class="modal-field">
+                            <label>Classification</label>
+                            <select name="classification" required>
+                                <option value="Internal">Internal</option>
+                                <option value="External">External</option>
+                            </select>
+                        </div>
+                        <?php if ($is_master): ?>
+                        <div class="modal-field">
+                            <label>Routing Type</label>
+                            <select name="routing_type" required>
+                                <option value="Receive">Receive (Incoming)</option>
+                                <option value="Release">Release (Outgoing)</option>
+                            </select>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="modal-section">
+                    <span class="modal-section-title">Sender & Signatory</span>
+                    <div class="modal-field">
+                        <label>Sender / Originating Person <span class="hint">(the specific person/office this came from — not your department)</span></label>
+                        <input type="text" name="sender" required maxlength="100" placeholder="e.g. Juan Dela Cruz, Office Requestor">
+                    </div>
+                    <?php if ($is_master): ?>
+                    <div class="modal-grid-2">
+                        <div class="modal-field">
+                            <label>Stamp Date <span class="hint">(Records Unit receiving stamp)</span></label>
+                            <input type="date" name="stamped_date">
+                        </div>
+                        <div class="modal-field">
+                            <label>Stamp Time</label>
+                            <input type="time" name="stamped_time">
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    <div class="modal-field">
+                        <label>Signatory / Officer <span class="hint">(optional)</span></label>
+                        <input type="text" name="signatory" placeholder="Reviewing officer or signatory" maxlength="100">
+                    </div>
+                </div>
+
+                <?php if ($is_master): ?>
+                <div class="modal-section">
+                    <span class="modal-section-title">Workflow / Processing</span>
+                    <div class="modal-field">
+                        <label>Tracking Status</label>
+                        <select name="status" required>
+                            <option value="Received" selected>Received</option>
+                            <option value="Pending">Pending</option>
+                            <option value="Overdue">Overdue</option>
+                        </select>
+                        <span class="modal-hint">Encoding something Records Unit already has in hand — this sets its initial tracking status.</span>
+                    </div>
+
+                    <div class="modal-checkbox-row">
+                        <input type="checkbox" id="copy_retained" name="copy_retained" value="1">
+                        <label for="copy_retained">Copy Retained in Records Office (Photocopy left behind)</label>
+                    </div>
+
+                    <div class="modal-field">
+                        <label>OP Notes / Instructions</label>
+                        <textarea name="op_notes" placeholder="Notes or instructions from the Office of the President..." rows="2"></textarea>
+                    </div>
+
+                    <div class="modal-field">
+                        <label>Dissemination Method (Kung Outgoing/Release)</label>
+                        <select name="dissemination_method">
+                            <option value="">-- Select Method --</option>
+                            <option value="In-Person">In-Person</option>
+                            <option value="Email">Email</option>
+                            <option value="Mail / Courier">Mail / Courier</option>
                         </select>
                     </div>
                 </div>
-
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Sender / Office</label>
-                    <input type="text" name="sender" required maxlength="100" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
+                <?php else: ?>
+                <div class="modal-section">
+                    <span class="modal-section-title">Submitting Department</span>
+                    <span style="display: block; font-size: 14px; font-weight: 700; color: #166534;"><?php echo htmlspecialchars($my_department ?: 'Not set — contact your Admin'); ?></span>
+                    <span class="modal-hint">Automatically detected from your account — this cannot be changed here.</span>
                 </div>
+                <div class="modal-note">
+                    <i data-lucide="info" style="width: 13px; flex-shrink: 0;"></i>
+                    <span>This request will be submitted with status <strong>"Submitted"</strong> and routed to Records Unit for review. Tracking number, receiving timestamp, and routing are all assigned automatically.</span>
+                </div>
+                <?php endif; ?>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-                    <div>
-                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #334155;">Stamp Date</label>
-                        <input type="date" name="stamped_date" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+                <div class="modal-section">
+                    <span class="modal-section-title">Confidentiality & Attachment</span>
+                    <div class="modal-checkbox-row danger">
+                        <input type="checkbox" id="is_confidential" name="is_confidential" value="1">
+                        <label for="is_confidential">Mark as Confidential Document</label>
                     </div>
-                    <div>
-                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #334155;">Stamp Time</label>
-                        <input type="time" name="stamped_time" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+                    <div class="modal-field">
+                        <label>Attach Document File (PDF, DOCX, DOC, JPG, PNG) <span class="hint">— optional, Records Unit can attach the scanned copy later</span></label>
+                        <input type="file" name="document_file" id="newDocFileInput" accept=".pdf,.docx,.doc,.jpg,.jpeg,.png" style="display: none;" onchange="updateFileLabel(this, 'newDocFileLabel')">
+                        <label for="newDocFileInput" id="newDocFileLabel" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; border: 1.5px dashed #94a3b8; border-radius: 8px; font-size: 13px; color: #64748b; cursor: pointer; background: #ffffff; box-sizing: border-box;" onmouseover="this.style.borderColor='#166534'; this.style.background='#f0fdf4';" onmouseout="this.style.borderColor='#94a3b8'; this.style.background='#ffffff';">
+                            <i data-lucide="upload" style="width: 15px; flex-shrink: 0;"></i>
+                            <span>Click to choose a file, or drag it here (optional)</span>
+                        </label>
                     </div>
                 </div>
 
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Signatory / Officer</label>
-                    <input type="text" name="signatory" placeholder="Reviewing officer or signatory" maxlength="100" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
                 </div>
-
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Tracking Status</label>
-                    <select name="status" required style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
-                        <option value="Received">Received</option>
-                        <option value="Pending">Pending</option>
-                        <option value="Overdue">Overdue</option>
-                    </select>
-                </div>
-
-                <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                    <input type="checkbox" id="copy_retained" name="copy_retained" value="1" style="width: 16px; height: 16px;">
-                    <label for="copy_retained" style="font-size: 13px; font-weight: 600; color: #334155; cursor: pointer;">Copy Retained in Records Office (Photocopy left behind)</label>
-                </div>
-
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">OP Notes / Instructions</label>
-                    <textarea name="op_notes" placeholder="Notes or instructions from the Office of the President..." rows="2" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;"></textarea>
-                </div>
-
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Dissemination Method (Kung Outgoing/Release)</label>
-                    <select name="dissemination_method" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
-                        <option value="">-- Select Method --</option>
-                        <option value="In-Person">In-Person</option>
-                        <option value="Email">Email</option>
-                        <option value="Mail / Courier">Mail / Courier</option>
-                    </select>
-                </div>
-
-                <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
-                    <input type="checkbox" id="is_confidential" name="is_confidential" value="1" style="width: 16px; height: 16px;">
-                    <label for="is_confidential" style="font-size: 13px; font-weight: 600; color: #991b1b; cursor: pointer;">Mark as Confidential Document</label>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Attach Document File (PDF, DOCX, DOC, JPG, PNG)</label>
-                    <input type="file" name="document_file" id="newDocFileInput" required accept=".pdf,.docx,.doc,.jpg,.jpeg,.png" style="display: none;" onchange="updateFileLabel(this, 'newDocFileLabel')">
-                    <label for="newDocFileInput" id="newDocFileLabel" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; border: 1.5px dashed #94a3b8; border-radius: 8px; font-size: 13px; color: #64748b; cursor: pointer; background: #f8fafc; box-sizing: border-box;" onmouseover="this.style.borderColor='#166534'; this.style.background='#f0fdf4';" onmouseout="this.style.borderColor='#94a3b8'; this.style.background='#f8fafc';">
-                        <i data-lucide="upload" style="width: 15px; flex-shrink: 0;"></i>
-                        <span>Click to choose a file, or drag it here</span>
-                    </label>
-                </div>
-
-                <div style="display: flex; justify-content: flex-end; gap: 8px;">
-                    <button type="button" onclick="closeModal()" style="padding: 8px 16px; background: #e2e8f0; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; color: #475569;">Cancel</button>
-                    <button type="submit" style="padding: 8px 16px; background: #166534; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Save Document</button>
+                <div class="modal-footer">
+                    <button type="button" onclick="closeModal()" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Cancel</button>
+                    <button type="submit" class="modal-btn modal-btn-primary"><i data-lucide="check"></i> Save Document</button>
                 </div>
             </form>
         </div>
     </div>
 
     <!-- EDIT MODAL (KASAMA NA ANG WORKFLOW FIELDS) -->
-    <div id="editDocumentModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
-        <div class="modal-card" style="background: white; padding: 24px; border-radius: 12px; width: 500px; max-width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <h3 style="margin: 0; font-size: 18px; color: #0f172a;">Edit Document</h3>
-                <button type="button" onclick="closeEditModal()" style="background: none; border: none; font-size: 18px; cursor: pointer; color: #64748b;">&times;</button>
+    <div id="editDocumentModal" class="modal-overlay" style="display: none;">
+        <div class="modal-panel modal-panel--md">
+            <div class="modal-header">
+                <div class="modal-header-text"><h3>Edit Document</h3></div>
+                <button type="button" onclick="closeEditModal()" class="modal-close">&times;</button>
             </div>
             <form action="update_document.php" method="POST">
+                <?php csrf_field(); ?>
                 <input type="hidden" name="id" id="edit_id">
-                
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Document Title</label>
-                    <input type="text" name="title" id="edit_title" required maxlength="150" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
+                <div class="modal-body">
+
+                <div class="modal-section">
+                    <span class="modal-section-title">Document Details</span>
+                    <div class="modal-field">
+                        <label>Document Title</label>
+                        <input type="text" name="title" id="edit_title" required maxlength="150">
+                    </div>
+                    <div class="modal-field">
+                        <label>Category</label>
+                        <input type="text" name="category" id="edit_category" required>
+                    </div>
+                    <div class="modal-grid-2">
+                        <div class="modal-field">
+                            <label>Classification</label>
+                            <select name="classification" id="edit_classification" required>
+                                <option value="Internal">Internal</option>
+                                <option value="External">External</option>
+                            </select>
+                        </div>
+                        <div class="modal-field">
+                            <label>Routing Type</label>
+                            <select name="routing_type" id="edit_routing_type" required>
+                                <option value="Receive">Receive (Incoming)</option>
+                                <option value="Release">Release (Outgoing)</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
 
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Category</label>
-                    <input type="text" name="category" id="edit_category" required style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
+                <div class="modal-section">
+                    <span class="modal-section-title">Sender & Signatory</span>
+                    <div class="modal-field">
+                        <label>Sender / Office</label>
+                        <input type="text" name="sender" id="edit_sender" required maxlength="100">
+                    </div>
+                    <div class="modal-grid-2">
+                        <div class="modal-field">
+                            <label>Stamp Date</label>
+                            <input type="date" name="stamped_date" id="edit_stamped_date">
+                        </div>
+                        <div class="modal-field">
+                            <label>Stamp Time</label>
+                            <input type="time" name="stamped_time" id="edit_stamped_time">
+                        </div>
+                    </div>
+                    <div class="modal-field">
+                        <label>Signatory / Officer</label>
+                        <input type="text" name="signatory" id="edit_signatory" maxlength="100">
+                    </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-                    <div>
-                        <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Classification</label>
-                        <select name="classification" id="edit_classification" required style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
-                            <option value="Internal">Internal</option>
-                            <option value="External">External</option>
+                <div class="modal-section">
+                    <span class="modal-section-title">Workflow / Processing</span>
+                    <div class="modal-field">
+                        <label>Tracking Status</label>
+                        <select name="status" id="edit_status" required>
+                            <option value="Received">Received</option>
+                            <option value="Pending">Pending</option>
+                            <option value="Overdue">Overdue</option>
                         </select>
                     </div>
-                    <div>
-                        <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Routing Type</label>
-                        <select name="routing_type" id="edit_routing_type" required style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
-                            <option value="Receive">Receive (Incoming)</option>
-                            <option value="Release">Release (Outgoing)</option>
-                        </select>
+                    <div class="modal-checkbox-row">
+                        <input type="checkbox" id="edit_copy_retained" name="copy_retained" value="1">
+                        <label for="edit_copy_retained">Copy Retained in Records Office (Photocopy left behind)</label>
                     </div>
                 </div>
 
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Sender / Office</label>
-                    <input type="text" name="sender" id="edit_sender" required maxlength="100" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
+                <!-- OP Notes / Dissemination Method: hindi na editable dito. Ang mga ito
+                     ay opisyal na directive/workflow data — nire-record ito sa pamamagitan
+                     ng Forward/Instruction action (Approvals) at ng Release/Disseminate
+                     action, kung saan naka-attach ang aktor, petsa, at tracking history.
+                     Basta i-edit ito dito ay malalampasan ang audit trail na iyon, kaya
+                     read-only na lang ito ipinapakita para malinaw kung nasaan talaga
+                     dapat baguhin ang mga ito. -->
+                <div class="modal-section">
+                    <span class="modal-section-title">OP Notes / Instructions <span style="font-weight:normal; text-transform:none;">(read-only)</span></span>
+                    <p id="edit_op_notes_display" style="margin: 0; font-size: 13px; color: #334155; white-space: pre-line;">—</p>
+                    <span class="modal-hint">Added via the Forward/Instruction action in Approvals — not editable here.</span>
+                </div>
+                <div class="modal-section">
+                    <span class="modal-section-title">Dissemination Method <span style="font-weight:normal; text-transform:none;">(read-only)</span></span>
+                    <p id="edit_dissemination_method_display" style="margin: 0; font-size: 13px; color: #334155;">—</p>
+                    <span class="modal-hint">Set via the Release/Disseminate action — not editable here.</span>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-                    <div>
-                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #334155;">Stamp Date</label>
-                        <input type="date" name="stamped_date" id="edit_stamped_date" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
-                    </div>
-                    <div>
-                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #334155;">Stamp Time</label>
-                        <input type="time" name="stamped_time" id="edit_stamped_time" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
-                    </div>
+                <div class="modal-checkbox-row danger">
+                    <input type="checkbox" id="edit_is_confidential" name="is_confidential" value="1">
+                    <label for="edit_is_confidential">Mark as Confidential Document</label>
                 </div>
 
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Signatory / Officer</label>
-                    <input type="text" name="signatory" id="edit_signatory" maxlength="100" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
                 </div>
-
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Tracking Status</label>
-                    <select name="status" id="edit_status" required style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
-                        <option value="Received">Received</option>
-                        <option value="Pending">Pending</option>
-                        <option value="Overdue">Overdue</option>
-                    </select>
-                </div>
-
-                <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                    <input type="checkbox" id="edit_copy_retained" name="copy_retained" value="1" style="width: 16px; height: 16px;">
-                    <label for="edit_copy_retained" style="font-size: 13px; font-weight: 600; color: #334155; cursor: pointer;">Copy Retained in Records Office (Photocopy left behind)</label>
-                </div>
-
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">OP Notes / Instructions</label>
-                    <textarea name="op_notes" id="edit_op_notes" placeholder="Notes or instructions from the Office of the President..." rows="2" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;"></textarea>
-                </div>
-
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155;">Dissemination Method (Kung Outgoing/Release)</label>
-                    <select name="dissemination_method" id="edit_dissemination_method" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
-                        <option value="">-- Select Method --</option>
-                        <option value="In-Person">In-Person</option>
-                        <option value="Email">Email</option>
-                        <option value="Mail / Courier">Mail / Courier</option>
-                    </select>
-                </div>
-
-                <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
-                    <input type="checkbox" id="edit_is_confidential" name="is_confidential" value="1" style="width: 16px; height: 16px;">
-                    <label for="edit_is_confidential" style="font-size: 13px; font-weight: 600; color: #991b1b; cursor: pointer;">Mark as Confidential Document</label>
-                </div>
-
-                <div style="display: flex; justify-content: flex-end; gap: 8px;">
-                    <button type="button" onclick="closeEditModal()" style="padding: 8px 16px; background: #e2e8f0; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; color: #475569;">Cancel</button>
-                    <button type="submit" style="padding: 8px 16px; background: #166534; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Update Changes</button>
+                <div class="modal-footer">
+                    <button type="button" onclick="closeEditModal()" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Cancel</button>
+                    <button type="submit" class="modal-btn modal-btn-primary"><i data-lucide="check"></i> Update Changes</button>
                 </div>
             </form>
         </div>
     </div>
 
     <!-- VIEW DOCUMENT MODAL -->
-    <div id="viewDocumentModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
-        <div class="modal-card" style="background: white; padding: 28px; border-radius: 12px; width: 600px; max-width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 25px rgba(0,0,0,0.15); font-family: inherit;">
-            <div style="border-bottom: 2px solid #166534; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <h4 style="margin: 0; font-size: 14px; color: #166534; font-weight: 700; text-transform: uppercase;">Aurora State College of Technology</h4>
-                    <h3 style="margin: 4px 0 0 0; font-size: 18px; color: #0f172a;">Official Document Record</h3>
+    <div id="viewDocumentModal" class="modal-overlay" style="display: none;">
+        <div class="modal-panel modal-panel--lg">
+            <div class="modal-header">
+                <div class="modal-header-text">
+                    <span class="modal-subtitle" style="text-transform: uppercase; font-weight: 700; color: #166534; letter-spacing: .04em;">Aurora State College of Technology</span>
+                    <h3>Official Document Record <strong id="view_tracking" class="modal-badge"></strong></h3>
                 </div>
-                <button type="button" onclick="closeViewModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b;">&times;</button>
+                <button type="button" onclick="closeViewModal()" class="modal-close">&times;</button>
             </div>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; font-size: 14px;">
-                <div>
-                    <span style="display: block; font-size: 12px; color: #64748b; font-weight: 600;">Tracking Number</span>
-                    <strong id="view_tracking" style="color: #0f172a; font-size: 15px;"></strong>
-                </div>
-                <div>
-                    <span style="display: block; font-size: 12px; color: #64748b; font-weight: 600;">Status & Classification</span>
-                    <div style="display: flex; gap: 6px; margin-top: 2px;">
+            <div class="modal-body">
+
+            <div class="modal-section">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+                    <p id="view_title" style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;"></p>
+                    <div style="display: flex; gap: 6px; flex-shrink: 0;">
                         <span id="view_status_badge" style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;"></span>
                         <span id="view_confidential_badge" style="display: none; background: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700;">CONFIDENTIAL</span>
                     </div>
                 </div>
-                <div style="grid-column: span 2;">
-                    <span style="display: block; font-size: 12px; color: #64748b; font-weight: 600;">Document Title</span>
-                    <p id="view_title" style="margin: 2px 0 0 0; color: #1e293b; font-weight: 500;"></p>
+                <p style="margin: 4px 0 0 0; font-size: 12.5px; color: #64748b;">
+                    <span id="view_category"></span> &middot; <span id="view_class_routing"></span>
+                </p>
+            </div>
+
+            <div class="modal-info-grid">
+                <div class="modal-info-item">
+                    <span class="modal-info-label">Sender / Office</span>
+                    <p id="view_sender" class="modal-info-value"></p>
                 </div>
-                <div>
-                    <span style="display: block; font-size: 12px; color: #64748b; font-weight: 600;">Category</span>
-                    <p id="view_category" style="margin: 2px 0 0 0; color: #334155;"></p>
+                <div class="modal-info-item">
+                    <span class="modal-info-label">Stamp Metadata (Date/Time)</span>
+                    <p id="view_stamp_meta" class="modal-info-value"></p>
                 </div>
-                <div>
-                    <span style="display: block; font-size: 12px; color: #64748b; font-weight: 600;">Classification / Routing</span>
-                    <p id="view_class_routing" style="margin: 2px 0 0 0; color: #334155;"></p>
+                <div class="modal-info-item">
+                    <span class="modal-info-label">Current Department / Office</span>
+                    <p id="view_department" class="modal-info-value"></p>
                 </div>
-                <div>
-                    <span style="display: block; font-size: 12px; color: #64748b; font-weight: 600;">Sender / Office</span>
-                    <p id="view_sender" style="margin: 2px 0 0 0; color: #334155;"></p>
+                <div class="modal-info-item">
+                    <span class="modal-info-label">Encoded / Received By</span>
+                    <p id="view_encoded_by" class="modal-info-value"></p>
                 </div>
-                <div>
-                    <span style="display: block; font-size: 12px; color: #64748b; font-weight: 600;">Stamp Metadata (Date/Time)</span>
-                    <p id="view_stamp_meta" style="margin: 2px 0 0 0; color: #334155;"></p>
+                <div class="modal-info-item" style="grid-column: span 2;">
+                    <span class="modal-info-label">Signatory / Reviewing Officer</span>
+                    <p id="view_signatory" class="modal-info-value"></p>
                 </div>
-                <div style="grid-column: span 2;">
-                    <span style="display: block; font-size: 12px; color: #64748b; font-weight: 600;">Signatory / Reviewing Officer</span>
-                    <p id="view_signatory" style="margin: 2px 0 0 0; color: #334155;"></p>
-                </div>
-                <div style="grid-column: span 2;">
-                    <span style="display: block; font-size: 12px; color: #64748b; font-weight: 600;">Workflow Status (Copy Retention & Dissemination)</span>
-                    <p id="view_workflow_extra" style="margin: 2px 0 0 0; color: #334155;"></p>
-                </div>
-                <div style="grid-column: span 2;">
-                    <span style="display: block; font-size: 12px; color: #64748b; font-weight: 600;">OP Notes / Instructions</span>
-                    <p id="view_op_notes" style="margin: 2px 0 0 0; color: #334155; font-style: italic; background: #f8fafc; padding: 6px; border-radius: 4px;"></p>
+                <div class="modal-info-item" style="grid-column: span 2;">
+                    <span class="modal-info-label">Workflow Status (Copy Retention & Dissemination)</span>
+                    <p id="view_workflow_extra" class="modal-info-value"></p>
                 </div>
             </div>
 
-            <div style="background: #f8fafc; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div class="modal-section">
+                <span class="modal-section-title">OP Notes / Instructions</span>
+                <p id="view_op_notes" style="margin: 0; font-size: 13px; color: #334155; font-style: italic;"></p>
+            </div>
+
+            <div class="modal-section" style="flex-direction: row; justify-content: space-between; align-items: center;">
                 <div style="font-size: 13px; color: #475569;">
-                    <i data-lucide="file-text" style="width: 14px; vertical-align: middle; margin-right: 4px;"></i> 
+                    <i data-lucide="file-text" style="width: 14px; vertical-align: middle; margin-right: 4px;"></i>
                     <span>Attached Document File</span>
                 </div>
-                <a id="view_download_link" href="#" class="primary-btn" style="padding: 6px 12px; font-size: 13px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; background: #166534; color: white; border-radius: 6px;"><i data-lucide="download" style="width: 12px;"></i> Download File</a>
+                <a id="view_download_link" href="#" target="_blank" rel="noopener" class="modal-btn modal-btn-primary" style="text-decoration: none;"><i data-lucide="eye"></i> View / Download File</a>
             </div>
 
-            <div style="display: flex; justify-content: flex-end;">
-                <button type="button" onclick="closeViewModal()" style="padding: 8px 16px; background: #e2e8f0; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; color: #475569;">Close</button>
+            </div>
+            <div class="modal-footer" style="justify-content: space-between;">
+                <a id="view_history_link" href="#" style="font-size: 12.5px; color: #166534; font-weight: 600; text-decoration: underline; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="history" style="width: 12px;"></i> View Full Tracking History</a>
+                <button type="button" onclick="closeViewModal()" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Close</button>
             </div>
         </div>
     </div>
 
-    <!-- PROFESSIONAL ARCHIVE CONFIRMATION MODAL -->
-    <div id="archiveConfirmModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
-        <div class="modal-card" style="background: white; padding: 24px; border-radius: 12px; width: 400px; max-width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.15); text-align: center;">
-            <div style="width: 48px; height: 48px; background: #fef3c7; color: #d97706; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto;">
-                <i data-lucide="archive" style="width: 24px; height: 24px;"></i>
+    <!-- RELEASE / DISSEMINATE DOCUMENT MODAL -->
+    <div id="releaseDocumentModal" class="modal-overlay" style="display: none;">
+        <div class="modal-panel modal-panel--sm">
+            <div class="modal-header">
+                <div class="modal-header-text">
+                    <h3>Release / Disseminate Document</h3>
+                    <p class="modal-subtitle">Broadcast this document to multiple internal offices, or release it to an external organization. Both are recorded in the document's tracking history.</p>
+                </div>
+                <button type="button" onclick="closeReleaseModal()" class="modal-close">&times;</button>
             </div>
-            <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #0f172a;">Archive Document</h3>
-            <p style="margin: 0 0 20px 0; font-size: 14px; color: #64748b;">Are you sure you want to archive this document? This action will move it to the archives.</p>
-            <div style="display: flex; justify-content: center; gap: 10px;">
-                <button type="button" onclick="closeArchiveModal()" style="padding: 8px 16px; background: #e2e8f0; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; color: #475569;">Cancel</button>
-                <a id="confirmArchiveBtn" href="#" style="padding: 8px 16px; background: #d97706; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center;">Yes, Archive</a>
+            <form action="release_document.php" method="POST">
+                <?php csrf_field(); ?>
+                <input type="hidden" name="document_id" id="release_document_id">
+                <div class="modal-body">
+
+                <div class="modal-radio-group">
+                    <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#334155; cursor:pointer;">
+                        <input type="radio" name="release_type" value="internal" checked onchange="toggleReleaseType()"> Internal (Multiple Offices)
+                    </label>
+                    <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#334155; cursor:pointer;">
+                        <input type="radio" name="release_type" value="external" onchange="toggleReleaseType()"> External Organization
+                    </label>
+                </div>
+
+                <div id="internalReleaseFields">
+                    <div class="modal-field">
+                        <label>Select Recipient Offices</label>
+                        <select name="recipient_departments[]" multiple size="5">
+                            <?php foreach ($known_departments as $dept_option): ?>
+                                <option value="<?php echo htmlspecialchars($dept_option); ?>"><?php echo htmlspecialchars($dept_option); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <span class="modal-hint">Hold Ctrl (Windows) or Cmd (Mac) to select more than one office.</span>
+                    </div>
+                </div>
+
+                <div id="externalReleaseFields" style="display: none;">
+                    <div class="modal-field" style="margin-bottom: 14px;">
+                        <label>External Recipient / Organization</label>
+                        <input type="text" name="external_recipient" placeholder="e.g. Bulacan State University" maxlength="150">
+                    </div>
+                    <div class="modal-field">
+                        <label>Delivery Method</label>
+                        <select name="delivery_method">
+                            <option value="In-Person">In-Person</option>
+                            <option value="Email">Email</option>
+                            <option value="Mail / Courier">Mail / Courier</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="modal-field">
+                    <label>Remarks / Release Notes (optional)</label>
+                    <textarea name="remarks" rows="2" placeholder="Any additional remarks about this release..."></textarea>
+                </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" onclick="closeReleaseModal()" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Cancel</button>
+                    <button type="submit" class="modal-btn modal-btn-info"><i data-lucide="send"></i> Confirm Release</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- RECEIVE DOCUMENT MODAL (Records Unit acknowledges custody of a Submitted request) -->
+    <div id="receiveDocumentModal" class="modal-overlay" style="display: none;">
+        <div class="modal-panel modal-panel--sm">
+            <div class="modal-header">
+                <div class="modal-header-text">
+                    <h3>Receive Document</h3>
+                    <p id="receiveDocInfo" class="modal-subtitle"></p>
+                </div>
+                <button type="button" onclick="closeReceiveModal()" class="modal-close">&times;</button>
+            </div>
+            <form action="receive_document.php" method="POST" enctype="multipart/form-data">
+                <?php csrf_field(); ?>
+                <input type="hidden" name="document_id" id="receive_document_id">
+                <div class="modal-body">
+
+                <div class="modal-field">
+                    <label>Attach Scanned Copy <span class="hint">(optional — if this was submitted physically)</span></label>
+                    <input type="file" name="document_file" accept=".pdf,.docx,.doc,.jpg,.jpeg,.png" style="font-size: 13px;">
+                </div>
+
+                <div class="modal-field">
+                    <label>Notes (optional)</label>
+                    <textarea name="notes" rows="2" placeholder="e.g. Verified complete, 1 original copy received..."></textarea>
+                </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" onclick="closeReceiveModal()" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Cancel</button>
+                    <button type="submit" class="modal-btn modal-btn-primary"><i data-lucide="check"></i> Confirm Receipt</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- PROFESSIONAL ARCHIVE CONFIRMATION MODAL -->
+    <div id="archiveConfirmModal" class="modal-overlay" style="display: none;">
+        <div class="modal-panel modal-panel--sm" style="text-align: center;">
+            <div class="modal-body" style="align-items: center;">
+                <div style="width: 48px; height: 48px; background: #fef3c7; color: #d97706; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 6px auto 0 auto;">
+                    <i data-lucide="archive" style="width: 24px; height: 24px;"></i>
+                </div>
+                <h3 style="margin: 0; font-size: 18px; color: #0f172a;">Archive Document</h3>
+                <p style="margin: 0; font-size: 14px; color: #64748b;">Are you sure you want to archive this document? This action will move it to the archives.</p>
+            </div>
+            <div class="modal-footer" style="justify-content: center;">
+                <button type="button" onclick="closeArchiveModal()" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Cancel</button>
+                <a id="confirmArchiveBtn" href="#" class="modal-btn" style="background: #d97706; color: #fff; text-decoration: none;"><i data-lucide="archive"></i> Yes, Archive</a>
             </div>
         </div>
     </div>
@@ -685,8 +903,8 @@ $result = mysqli_stmt_get_result($stmt);
                 let copyRetained = this.getAttribute('data-copy-retained');
                 document.getElementById('edit_copy_retained').checked = (copyRetained === '1');
 
-                document.getElementById('edit_op_notes').value = this.getAttribute('data-op-notes') || '';
-                document.getElementById('edit_dissemination_method').value = this.getAttribute('data-dissemination-method') || '';
+                document.getElementById('edit_op_notes_display').innerText = this.getAttribute('data-op-notes') || 'No instructions recorded yet.';
+                document.getElementById('edit_dissemination_method_display').innerText = this.getAttribute('data-dissemination-method') || 'Not yet released/disseminated.';
 
                 editModal.style.display = 'flex';
             });
@@ -720,6 +938,13 @@ $result = mysqli_stmt_get_result($stmt);
                 let opNotesVal = this.getAttribute('data-op-notes');
                 document.getElementById('view_op_notes').innerText = opNotesVal ? opNotesVal : 'No instructions or notes recorded.';
 
+                document.getElementById('view_department').innerText = this.getAttribute('data-department') || 'Unassigned';
+                document.getElementById('view_encoded_by').innerText = this.getAttribute('data-encoded-by') || 'Unknown';
+                // Kaparehong padded format ng tracking_no na naka-store sa tracking_logs
+                // (hal. "#REC-2026-0004"), para talagang tumugma ang search sa tracking.php
+                let paddedId = String(this.getAttribute('data-id')).padStart(4, '0');
+                document.getElementById('view_history_link').href = 'tracking.php?search=' + encodeURIComponent('#REC-2026-' + paddedId);
+
                 let isConf = this.getAttribute('data-confidential');
                 let confBadge = document.getElementById('view_confidential_badge');
                 if (isConf === '1') {
@@ -750,14 +975,96 @@ $result = mysqli_stmt_get_result($stmt);
         }
 
         // Clickable row
+        // NOTE: kinukuha ang reference ng viewBtn ISANG BESES lang dito (closure),
+        // hindi sa loob ng click handler mismo — dahil ang row-actions-menu ay
+        // ililipat (moved, hindi kinokopya) papunta sa <body> sa unang pagkabukas
+        // nito (tingnan ang "ROW ACTIONS DROPDOWN" JS sa ibaba), kaya hindi na ito
+        // child ng row pagkatapos. Sa pamamagitan ng pag-capture rito nang maaga,
+        // gumagana pa rin ang click-anywhere-on-row-to-view kahit nailipat na ang menu.
         document.querySelectorAll('#documentsTable tbody tr.clickable-doc-row').forEach(function(row) {
-            row.addEventListener('click', function() {
-                const viewBtn = this.querySelector('.btn-view');
-                if (viewBtn) {
+            const viewBtn = row.querySelector('.btn-view');
+            if (viewBtn) {
+                row.addEventListener('click', function() {
                     viewBtn.click();
+                });
+            }
+        });
+
+        // ROW ACTIONS DROPDOWN (View/Download/Edit/Receive/Release/Archive)
+        (function () {
+            let openMenu = null;
+            let openToggle = null;
+
+            function closeOpenMenu() {
+                if (openMenu) {
+                    openMenu.classList.remove('open');
+                }
+                if (openToggle) {
+                    openToggle.classList.remove('open');
+                }
+                openMenu = null;
+                openToggle = null;
+            }
+
+            function positionMenu(menu, toggle) {
+                const rect = toggle.getBoundingClientRect();
+                const menuWidth = menu.offsetWidth || 190;
+                const menuHeight = menu.offsetHeight || 200;
+                let left = rect.right - menuWidth;
+                let top = rect.bottom + 4;
+                if (left < 8) left = 8;
+                if (top + menuHeight > window.innerHeight - 8) {
+                    top = rect.top - menuHeight - 4;
+                }
+                menu.style.left = left + 'px';
+                menu.style.top = top + 'px';
+            }
+
+            document.querySelectorAll('.row-actions-toggle').forEach(function (toggle) {
+                const menu = toggle.nextElementSibling;
+                if (!menu || !menu.classList.contains('row-actions-menu')) return;
+
+                toggle.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    const isSameMenuOpen = (openMenu === menu);
+                    closeOpenMenu();
+                    if (isSameMenuOpen) return;
+
+                    // Ilipat (move, hindi kopyahin) ang menu papunta sa <body> para
+                    // hindi ito ma-clip ng overflow ng .card/table wrapper, at para
+                    // hindi maapektuhan ng position:fixed containing-block quirk
+                    // ng mga ancestor na may natitirang transform (e.g. .card).
+                    if (menu.parentElement !== document.body) {
+                        document.body.appendChild(menu);
+                    }
+                    menu.classList.add('open');
+                    toggle.classList.add('open');
+                    positionMenu(menu, toggle);
+                    openMenu = menu;
+                    openToggle = toggle;
+                });
+
+                // Isara ang dropdown agad pagkatapos pumili ng kahit anong aksyon
+                // dito (View/Edit/Receive/atbp.) — hindi dapat ito nakabukas pa
+                // habang bukas na ang kasunod na modal.
+                menu.querySelectorAll('.row-actions-item').forEach(function (item) {
+                    item.addEventListener('click', function () {
+                        closeOpenMenu();
+                    });
+                });
+            });
+
+            document.addEventListener('click', function (e) {
+                if (openMenu && !openMenu.contains(e.target)) {
+                    closeOpenMenu();
                 }
             });
-        });
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') closeOpenMenu();
+            });
+            window.addEventListener('resize', closeOpenMenu);
+            window.addEventListener('scroll', closeOpenMenu, true);
+        })();
 
         // Archive Modal
         const archiveModal = document.getElementById('archiveConfirmModal');
@@ -781,6 +1088,39 @@ $result = mysqli_stmt_get_result($stmt);
                 document.getElementById(pendingArchiveFormId).submit();
             }
         });
+
+        // Release / Disseminate Modal
+        const releaseModal = document.getElementById('releaseDocumentModal');
+
+        function openReleaseModal(docId) {
+            document.getElementById('release_document_id').value = docId;
+            releaseModal.style.display = 'flex';
+            lucide.createIcons();
+        }
+
+        function closeReleaseModal() {
+            releaseModal.style.display = 'none';
+        }
+
+        function toggleReleaseType() {
+            const isInternal = document.querySelector('input[name="release_type"]:checked').value === 'internal';
+            document.getElementById('internalReleaseFields').style.display = isInternal ? 'block' : 'none';
+            document.getElementById('externalReleaseFields').style.display = isInternal ? 'none' : 'block';
+        }
+
+        // Receive Modal (Records Unit acknowledges custody of a Submitted request)
+        const receiveModal = document.getElementById('receiveDocumentModal');
+
+        function openReceiveModal(docId, docTitle, fromDept) {
+            document.getElementById('receive_document_id').value = docId;
+            document.getElementById('receiveDocInfo').innerText = docTitle + ' — from ' + (fromDept || 'submitting office');
+            receiveModal.style.display = 'flex';
+            lucide.createIcons();
+        }
+
+        function closeReceiveModal() {
+            receiveModal.style.display = 'none';
+        }
     </script>
 </body>
 </html>

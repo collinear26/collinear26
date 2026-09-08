@@ -154,6 +154,12 @@ function showSweetAlert($icon, $title, $text, $actionType) {
     exit();
 }
 
+// LOGIN THROTTLING configuration — reasonable capstone-friendly na values,
+// hindi ito overly complicated: pagkatapos ng ilang sunod-sunod na maling
+// password, i-lock ang account nang ilang minuto bago pwedeng subukan ulit.
+define('LOGIN_MAX_ATTEMPTS', 5);
+define('LOGIN_LOCKOUT_MINUTES', 5);
+
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $username = mysqli_real_escape_string($conn, $_POST['username']);
     $password = $_POST['password'];
@@ -163,11 +169,28 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     if (mysqli_num_rows($result) === 1) {
         $user = mysqli_fetch_assoc($result);
+        $user_id = intval($user['id']);
+
+        // Kung naka-lock pa ang account na ito (masyadong maraming sunod-sunod
+        // na maling attempt kamakailan), tanggihan agad — kahit tama pa ang
+        // password na ipinasok ngayon — hanggang matapos ang lockout window.
+        // Hindi ito nagsasabi kung existing ba ang account o hindi (parehong
+        // generic ang mensahe), kaya hindi ito magagamit para mag-enumerate
+        // ng mga valid na account.
+        if (!empty($user['locked_until']) && strtotime($user['locked_until']) > time()) {
+            $wait_minutes = max(1, (int) ceil((strtotime($user['locked_until']) - time()) / 60));
+            showSweetAlert('error', 'Too Many Attempts', "For security, this account is temporarily locked due to repeated failed attempts. Please try again in about {$wait_minutes} minute(s).", 'back');
+        }
 
         // I-verify muna ang password bago ipakita ang account status,
         // para hindi malaman ng ibang tao kung "pending"/"inactive" ang status
         // ng isang account sa pamamagitan lang ng pag-guess ng email/ID number.
         if (password_verify($password, $user['password_hash'])) {
+
+            // Successful password: i-reset ang throttling counter
+            $reset_stmt = mysqli_prepare($conn, "UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?");
+            mysqli_stmt_bind_param($reset_stmt, "i", $user_id);
+            mysqli_stmt_execute($reset_stmt);
 
             if ($user['account_status'] === 'pending') {
                 showSweetAlert('warning', 'Account Pending', 'Your account is still pending approval from the admin.', 'back');
@@ -187,7 +210,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 showSweetAlert('success', 'Welcome Back, ' . $user['firstname'] . '!', 'Login successful. Redirecting to your dashboard...', 'redirect');
             }
         } else {
-            showSweetAlert('error', 'Incorrect Password', 'The password you entered is incorrect. Please try again.', 'back');
+            // Maling password: dagdagan ang failed-attempt counter, at i-lock
+            // kung umabot na sa limit
+            $new_attempts = intval($user['failed_login_attempts']) + 1;
+
+            if ($new_attempts >= LOGIN_MAX_ATTEMPTS) {
+                $lockout_minutes = LOGIN_LOCKOUT_MINUTES;
+                $lock_stmt = mysqli_prepare($conn, "UPDATE users SET failed_login_attempts = ?, locked_until = DATE_ADD(NOW(), INTERVAL ? MINUTE) WHERE id = ?");
+                mysqli_stmt_bind_param($lock_stmt, "iii", $new_attempts, $lockout_minutes, $user_id);
+                mysqli_stmt_execute($lock_stmt);
+                showSweetAlert('error', 'Too Many Attempts', 'Too many incorrect attempts. For security, this account is now temporarily locked for ' . LOGIN_LOCKOUT_MINUTES . ' minutes.', 'back');
+            } else {
+                $upd_stmt = mysqli_prepare($conn, "UPDATE users SET failed_login_attempts = ? WHERE id = ?");
+                mysqli_stmt_bind_param($upd_stmt, "ii", $new_attempts, $user_id);
+                mysqli_stmt_execute($upd_stmt);
+                showSweetAlert('error', 'Incorrect Password', 'The password you entered is incorrect. Please try again.', 'back');
+            }
         }
     } else {
         showSweetAlert('error', 'Account Not Found', 'No account is associated with this Email or ID Number.', 'back');

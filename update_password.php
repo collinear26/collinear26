@@ -1,91 +1,72 @@
 <?php
 session_start();
 include 'db_conn.php';
+include 'log_activity.php'; // I-include ang audit logger
+include 'csrf.php';
 
+// Kahit anong role (admin/officer/staff), basta naka-login, pwedeng
+// baguhin ang SARILING password nila dito
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
 }
 
-// Admin-only: Edit Document
-if (strtolower(trim($_SESSION['user_type'] ?? '')) !== 'admin') {
-    header("Location: documents.php?error=unauthorized");
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header("Location: settings.php");
     exit();
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $id = intval($_POST['id']);
-    $title = mysqli_real_escape_string($conn, mb_substr(trim($_POST['title']), 0, 150));
-    $category = mysqli_real_escape_string($conn, $_POST['category']);
-    $classification = mysqli_real_escape_string($conn, $_POST['classification']);
-    $routing_type = mysqli_real_escape_string($conn, $_POST['routing_type']);
-    $sender = mysqli_real_escape_string($conn, mb_substr(trim($_POST['sender']), 0, 100));
-    
-    // Stamp Metadata & Confidential Protocol
-    $stamped_date = !empty($_POST['stamped_date']) ? mysqli_real_escape_string($conn, $_POST['stamped_date']) : NULL;
-    $stamped_time = !empty($_POST['stamped_time']) ? mysqli_real_escape_string($conn, $_POST['stamped_time']) : NULL;
-    $signatory = !empty($_POST['signatory']) ? mysqli_real_escape_string($conn, mb_substr(trim($_POST['signatory']), 0, 100)) : NULL;
-    $is_confidential = isset($_POST['is_confidential']) ? 1 : 0;
-    
-    // New Workflow Fields (Copy Retention, OP Notes, Dissemination Method)
-    $copy_retained = isset($_POST['copy_retained']) ? 1 : 0;
-    $op_notes = !empty($_POST['op_notes']) ? mysqli_real_escape_string($conn, trim($_POST['op_notes'])) : NULL;
-    $dissemination_method = !empty($_POST['dissemination_method']) ? mysqli_real_escape_string($conn, $_POST['dissemination_method']) : NULL;
+require_csrf();
 
-    $tracking_status = mysqli_real_escape_string($conn, $_POST['status']);
+$user_id = intval($_SESSION['user_id']);
 
-    // Prepared query para sa pag-update ng documents table kabilang ang bagong workflow fields
-    $query = "UPDATE documents SET 
-                title = ?, 
-                category = ?, 
-                classification = ?, 
-                routing_type = ?, 
-                sender = ?, 
-                stamped_date = ?, 
-                stamped_time = ?, 
-                signatory = ?, 
-                is_confidential = ?, 
-                copy_retained = ?,
-                op_notes = ?,
-                dissemination_method = ?,
-                tracking_status = ? 
-              WHERE id = ?";
-              
-    $stmt = mysqli_prepare($conn, $query);
-    mysqli_stmt_bind_param($stmt, "ssssssssiissi", 
-        $title, 
-        $category, 
-        $classification, 
-        $routing_type, 
-        $sender, 
-        $stamped_date, 
-        $stamped_time, 
-        $signatory, 
-        $is_confidential, 
-        $copy_retained, 
-        $op_notes, 
-        $dissemination_method, 
-        $tracking_status, 
-        $id
-    );
-    
-    if (mysqli_stmt_execute($stmt)) {
-        $tracking_no = "#REC-2026-" . str_pad($id, 4, '0', STR_PAD_LEFT);
-        $routing_from = $sender;
-        $routing_to = "Active Records";
-        $action_taken = "Updated";
-        $processed_by = trim(($_SESSION['firstname'] ?? '') . ' ' . ($_SESSION['lastname'] ?? '')) ?: 'Unknown User';
+$current_password = $_POST['current_password'] ?? '';
+$new_password     = $_POST['new_password'] ?? '';
+$confirm_password = $_POST['confirm_password'] ?? '';
 
-        $log_query = "INSERT INTO tracking_logs (document_id, tracking_no, document_title, routing_from, routing_to, action_taken, processed_by) VALUES (?, ?, ?, ?, ?, ?, ?)";
-        $log_stmt = mysqli_prepare($conn, $log_query);
-        mysqli_stmt_bind_param($log_stmt, "issssss", $id, $tracking_no, $title, $routing_from, $routing_to, $action_taken, $processed_by);
-        mysqli_stmt_execute($log_stmt);
-
-        header("Location: documents.php?updated=1");
-        exit();
-    } else {
-        header("Location: documents.php?error=updatefailed");
-        exit();
-    }
+// Sunod sa parehong validation messages/codes na ginagamit na ng settings.php
+// (case 'empty', 'wrong_current', 'mismatch', 'tooshort', 'success')
+if ($current_password === '' || $new_password === '' || $confirm_password === '') {
+    header("Location: settings.php?pw_status=empty");
+    exit();
 }
-?>
+
+if ($new_password !== $confirm_password) {
+    header("Location: settings.php?pw_status=mismatch");
+    exit();
+}
+
+if (strlen($new_password) < 8) {
+    header("Location: settings.php?pw_status=tooshort");
+    exit();
+}
+
+// Kunin ang kasalukuyang password_hash ng naka-login na user mula sa database
+// (hindi sa session, dahil hindi naka-store ang password hash sa session)
+$stmt = mysqli_prepare($conn, "SELECT password_hash FROM users WHERE id = ?");
+mysqli_stmt_bind_param($stmt, "i", $user_id);
+mysqli_stmt_execute($stmt);
+$result = mysqli_stmt_get_result($stmt);
+$user = $result ? mysqli_fetch_assoc($result) : null;
+
+if (!$user || !password_verify($current_password, $user['password_hash'])) {
+    header("Location: settings.php?pw_status=wrong_current");
+    exit();
+}
+
+$new_hash = password_hash($new_password, PASSWORD_DEFAULT);
+
+$update_stmt = mysqli_prepare($conn, "UPDATE users SET password_hash = ? WHERE id = ?");
+mysqli_stmt_bind_param($update_stmt, "si", $new_hash, $user_id);
+
+if (mysqli_stmt_execute($update_stmt)) {
+    // Audit trail: sino at kailan nagbago ng sariling password (hindi kailanman
+    // nire-record ang aktwal na password sa log)
+    log_activity($conn, $user_id, "CHANGE_PASSWORD", "Changed own account password via Settings.");
+
+    header("Location: settings.php?pw_status=success");
+    exit();
+} else {
+    header("Location: settings.php?pw_status=error");
+    exit();
+}

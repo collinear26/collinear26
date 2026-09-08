@@ -157,41 +157,42 @@ $result = mysqli_query($conn, $query);
     </div>
 
     <!-- VIEW AUDIT LOG MODAL -->
-    <div id="viewAuditModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
-        <div class="modal-card" style="background: white; padding: 28px; border-radius: 12px; width: 550px; max-width: 90%; box-shadow: 0 4px 25px rgba(0,0,0,0.15); font-family: inherit;">
-            <div style="border-bottom: 2px solid #166534; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <h4 style="margin: 0; font-size: 14px; color: #166534; font-weight: 700; text-transform: uppercase;">Aurora State College of Technology</h4>
-                    <h3 style="margin: 4px 0 0 0; font-size: 18px; color: #0f172a;">Audit Log Details</h3>
+    <div id="viewAuditModal" class="modal-overlay" style="display: none;">
+        <div class="modal-panel modal-panel--lg">
+            <div class="modal-header">
+                <div class="modal-header-text">
+                    <span class="modal-subtitle" style="text-transform: uppercase; font-weight: 700; color: #166534; letter-spacing: .04em;">Aurora State College of Technology</span>
+                    <h3>Audit Log Details <strong id="modal_action" class="modal-badge"></strong></h3>
                 </div>
-                <button type="button" onclick="closeAuditModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b;">&times;</button>
+                <button type="button" onclick="closeAuditModal()" class="modal-close">&times;</button>
             </div>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; font-size: 14px;">
-                <div>
-                    <span style="display: block; font-size: 12px; color: #64748b; font-weight: 600;">Timestamp</span>
-                    <strong id="modal_timestamp" style="color: #0f172a; font-size: 14px;"></strong>
-                </div>
-                <div>
-                    <span style="display: block; font-size: 12px; color: #64748b; font-weight: 600;">IP Address</span>
-                    <code id="modal_ip" style="color: #0f172a; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 13px;"></code>
-                </div>
-                <div style="grid-column: span 2;">
-                    <span style="display: block; font-size: 12px; color: #64748b; font-weight: 600;">User Handler</span>
-                    <p id="modal_user" style="margin: 2px 0 0 0; color: #1e293b; font-weight: 600;"></p>
-                </div>
-                <div style="grid-column: span 2;">
-                    <span style="display: block; font-size: 12px; color: #64748b; font-weight: 600;">System Action</span>
-                    <p id="modal_action" style="margin: 2px 0 0 0; color: #166534; font-weight: 700;"></p>
-                </div>
-                <div style="grid-column: span 2;">
-                    <span style="display: block; font-size: 12px; color: #64748b; font-weight: 600;">Complete Description & Details</span>
-                    <div id="modal_description" style="margin: 6px 0 0 0; color: #334155; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px; line-height: 1.5; word-break: break-word;"></div>
+            <div class="modal-body">
+
+            <div class="modal-section">
+                <div class="modal-info-grid">
+                    <div class="modal-info-item">
+                        <span class="modal-info-label">Timestamp</span>
+                        <strong id="modal_timestamp" class="modal-info-value" style="font-size: 14px;"></strong>
+                    </div>
+                    <div class="modal-info-item">
+                        <span class="modal-info-label">IP Address</span>
+                        <code id="modal_ip" style="color: #0f172a; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 13px;"></code>
+                    </div>
+                    <div class="modal-info-item" style="grid-column: span 2;">
+                        <span class="modal-info-label">User Handler</span>
+                        <p id="modal_user" class="modal-info-value" style="font-weight: 600;"></p>
+                    </div>
                 </div>
             </div>
 
-            <div style="display: flex; justify-content: flex-end;">
-                <button type="button" onclick="closeAuditModal()" style="padding: 8px 16px; background: #166534; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; color: white;">Close</button>
+            <div class="modal-section">
+                <span class="modal-section-title">Complete Description & Details</span>
+                <div id="modal_description" style="margin: 0; color: #334155; font-size: 13px; line-height: 1.5; word-break: break-word;"></div>
+            </div>
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeAuditModal()" class="modal-btn modal-btn-primary"><i data-lucide="x"></i> Close</button>
             </div>
         </div>
     </div>

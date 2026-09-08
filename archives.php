@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'db_conn.php';
+include 'csrf.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
@@ -171,6 +172,7 @@ $result = mysqli_stmt_get_result($stmt);
                                             <div class="action-btns" style="justify-content: flex-end;">
                                                 <!-- Professional Restore Button -->
                                                 <form method="POST" action="restore_document.php" class="inline-approval-form" id="restore-form-<?php echo $row['id']; ?>">
+                                                    <?php csrf_field(); ?>
                                                     <input type="hidden" name="id" value="<?php echo $row['id']; ?>">
                                                     <button type="button" class="action-icon-btn" title="Restore Record" onclick="openRestoreModal('restore-form-<?php echo $row['id']; ?>')" style="color: #166534; background: rgba(22, 101, 52, 0.1); border: 1px solid rgba(22, 101, 52, 0.25); width: auto; padding: 0 10px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700;">
                                                         <i data-lucide="rotate-ccw" style="width:13px;"></i> Restore
@@ -178,7 +180,7 @@ $result = mysqli_stmt_get_result($stmt);
                                                 </form>
 
                                                 <!-- Download Button -->
-                                                <a href="download_doc.php?id=<?php echo $row['id']; ?>" class="action-icon-btn" title="Download Copy"><i data-lucide="download" style="width:14px;"></i></a>
+                                                <a href="download_doc.php?id=<?php echo $row['id']; ?>" target="_blank" rel="noopener" class="action-icon-btn" title="View / Download Copy"><i data-lucide="download" style="width:14px;"></i></a>
                                             </div>
                                         </td>
                                     </tr>
@@ -231,16 +233,18 @@ $result = mysqli_stmt_get_result($stmt);
     </div>
 
     <!-- PROFESSIONAL RESTORE CONFIRMATION MODAL -->
-    <div id="restoreConfirmModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
-        <div class="modal-card" style="background: white; padding: 24px; border-radius: 12px; width: 400px; max-width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.15); text-align: center;">
-            <div style="width: 48px; height: 48px; background: #f0fdf4; color: #166534; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto;">
-                <i data-lucide="rotate-ccw" style="width: 24px; height: 24px;"></i>
+    <div id="restoreConfirmModal" class="modal-overlay" style="display: none;">
+        <div class="modal-panel modal-panel--sm" style="text-align: center;">
+            <div class="modal-body" style="align-items: center;">
+                <div style="width: 48px; height: 48px; background: #f0fdf4; color: #166534; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 6px auto 0 auto;">
+                    <i data-lucide="rotate-ccw" style="width: 24px; height: 24px;"></i>
+                </div>
+                <h3 style="margin: 0; font-size: 18px; color: #0f172a;">Restore Document Record</h3>
+                <p style="margin: 0; font-size: 14px; color: #64748b;">Are you sure you want to restore this document back to active records?</p>
             </div>
-            <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #0f172a;">Restore Document Record</h3>
-            <p style="margin: 0 0 20px 0; font-size: 14px; color: #64748b;">Are you sure you want to restore this document back to active records?</p>
-            <div style="display: flex; justify-content: center; gap: 10px;">
-                <button type="button" onclick="closeRestoreModal()" style="padding: 8px 16px; background: #e2e8f0; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; color: #475569;">Cancel</button>
-                <a id="confirmRestoreBtn" href="#" style="padding: 8px 16px; background: #166534; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center;">Yes, Restore</a>
+            <div class="modal-footer" style="justify-content: center;">
+                <button type="button" onclick="closeRestoreModal()" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Cancel</button>
+                <a id="confirmRestoreBtn" href="#" class="modal-btn modal-btn-primary" style="text-decoration: none;"><i data-lucide="rotate-ccw"></i> Yes, Restore</a>
             </div>
         </div>
     </div>

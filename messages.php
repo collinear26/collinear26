@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'db_conn.php';
+include 'csrf.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
@@ -55,7 +56,8 @@ $active_conv_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 $active_conv = null;
 if ($active_conv_id > 0) {
     $active_check = mysqli_query($conn, "
-        SELECT c.id AS conv_id, u.id AS other_id, u.firstname, u.lastname, u.department
+        SELECT c.id AS conv_id, u.id AS other_id, u.firstname, u.lastname, u.department,
+               u.email, u.user_type, u.id_number, u.account_status
         FROM conversations c
         JOIN users u ON u.id = (CASE WHEN c.user_one_id = $my_id THEN c.user_two_id ELSE c.user_one_id END)
         WHERE c.id = $active_conv_id AND (c.user_one_id = $my_id OR c.user_two_id = $my_id)
@@ -205,12 +207,79 @@ if ($all_users_result) {
         .send-btn:hover { background: #022c22; }
         .send-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-        /* NEW CONVERSATION MODAL */
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
-        .modal-box { background: #fff; border-radius: 14px; width: 400px; max-width: 90%; max-height: 70vh; display: flex; flex-direction: column; overflow: hidden; }
-        .modal-header { padding: 18px 20px; border-bottom: 1px solid rgba(6,78,59,0.1); display: flex; justify-content: space-between; align-items: center; }
-        .modal-header h3 { font-size: 15px; font-weight: 700; color: #0f172a; margin: 0; }
-        .modal-close-btn { background: none; border: none; font-size: 18px; cursor: pointer; color: #64748b; }
+        /* CONTACT PROFILE PANEL (ikatlong column) — simpleng buod ng
+           impormasyon ng kausap, katabi ng chat thread. Nagpapakita lang
+           kapag may napiling conversation; nawawala kapag wala pang napili
+           o sa maliliit na screen (tingnan ang mobile media query sa ibaba). */
+        .chat-profile-panel {
+            width: 260px;
+            flex-shrink: 0;
+            border-left: 1px solid rgba(6, 78, 59, 0.15);
+            background: rgba(255, 255, 255, 0.5);
+            overflow-y: auto;
+            padding: 28px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+        .profile-avatar-lg {
+            width: 72px;
+            height: 72px;
+            border-radius: 18px;
+            color: #fff;
+            font-weight: 800;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 14px;
+        }
+        .profile-panel-name { font-size: 15px; font-weight: 800; color: #0f172a; margin: 0; }
+        .profile-panel-role {
+            display: inline-block;
+            margin-top: 6px;
+            padding: 3px 10px;
+            border-radius: 999px;
+            background: rgba(6, 78, 59, 0.1);
+            color: #064e3b;
+            font-size: 10.5px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+        }
+        .profile-panel-section {
+            width: 100%;
+            margin-top: 24px;
+            padding-top: 18px;
+            border-top: 1px solid rgba(6, 78, 59, 0.1);
+            text-align: left;
+        }
+        .profile-panel-section-title {
+            font-size: 10.5px;
+            font-weight: 800;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            margin: 0 0 12px 0;
+        }
+        .profile-panel-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
+        .profile-panel-row:last-child { margin-bottom: 0; }
+        .profile-panel-row i { width: 15px; height: 15px; color: #064e3b; flex-shrink: 0; margin-top: 1px; }
+        .profile-panel-row-label { font-size: 10px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+        .profile-panel-row-value { font-size: 12.5px; color: #1e293b; font-weight: 600; word-break: break-word; }
+
+        /* Sa maliit na screen, wala nang puwang para sa 3rd column — ang
+           conversation list at chat lang ang priority doon (parehong
+           breakpoint ng ibang responsive work sa buong app). */
+        @media (max-width: 1024px) {
+            .chat-profile-panel { display: none; }
+        }
+
+        /* NEW CONVERSATION MODAL — ang overlay/panel/header chrome ay galing na
+           sa shared .modal-overlay/.modal-panel/.modal-header sa style.css;
+           dito na lang ang mga bagay na specific sa "user picker" layout na
+           ito (search box + scrollable list), dahil hindi ito karaniwang form. */
         .modal-search { padding: 12px 20px; border-bottom: 1px solid rgba(6,78,59,0.08); }
         .modal-user-list { overflow-y: auto; flex: 1; }
         .modal-user-item { display: flex; align-items: center; gap: 10px; padding: 12px 20px; cursor: pointer; text-decoration: none; color: inherit; transition: 0.2s; }
@@ -321,7 +390,7 @@ if ($all_users_result) {
                                                     <span class="msg-deleted">This message was unsent</span>
                                                 <?php else: ?>
                                                     <?php if (!empty($msg['attachment_path'])): ?>
-                                                        <a href="<?php echo htmlspecialchars($msg['attachment_path']); ?>" target="_blank" class="msg-attachment">
+                                                        <a href="download_attachment.php?id=<?php echo (int) $msg['id']; ?>" target="_blank" class="msg-attachment">
                                                             <i data-lucide="paperclip" style="width:13px; flex-shrink:0;"></i>
                                                             <span class="msg-attachment-name"><?php echo htmlspecialchars($msg['attachment_name']); ?></span>
                                                         </a>
@@ -339,6 +408,7 @@ if ($all_users_result) {
 
                             <form id="chatForm" class="chat-input-area" style="margin: 0;" enctype="multipart/form-data">
                                 <input type="hidden" name="conversation_id" value="<?php echo $active_conv_id; ?>">
+                                <?php csrf_field(); ?>
                                 <input type="file" name="attachment" id="attachmentInput" style="display: none;" accept=".pdf,.docx,.doc,.jpg,.jpeg,.png" onchange="showAttachPreview()">
                                 <button type="button" class="attach-btn" title="Attach a file" onclick="document.getElementById('attachmentInput').click()">
                                     <i data-lucide="paperclip" style="width: 16px;"></i>
@@ -361,17 +431,58 @@ if ($all_users_result) {
                         <?php endif; ?>
                     </div>
 
+                    <?php if ($active_conv): ?>
+                        <!-- CONTACT PROFILE PANEL -->
+                        <div class="chat-profile-panel">
+                            <div class="profile-avatar-lg" style="background: <?php echo $active_color; ?>;"><?php echo $active_initials; ?></div>
+                            <p class="profile-panel-name"><?php echo $active_name; ?></p>
+                            <span class="profile-panel-role"><?php echo htmlspecialchars(ucfirst(strtolower($active_conv['user_type'] ?? 'Staff'))); ?></span>
+
+                            <div class="profile-panel-section">
+                                <p class="profile-panel-section-title">Contact Information</p>
+                                <div class="profile-panel-row">
+                                    <i data-lucide="building-2"></i>
+                                    <div>
+                                        <div class="profile-panel-row-label">Department</div>
+                                        <div class="profile-panel-row-value"><?php echo htmlspecialchars($active_conv['department'] ?: 'Not set'); ?></div>
+                                    </div>
+                                </div>
+                                <div class="profile-panel-row">
+                                    <i data-lucide="mail"></i>
+                                    <div>
+                                        <div class="profile-panel-row-label">Email</div>
+                                        <div class="profile-panel-row-value"><?php echo htmlspecialchars($active_conv['email'] ?? 'Not set'); ?></div>
+                                    </div>
+                                </div>
+                                <div class="profile-panel-row">
+                                    <i data-lucide="id-card"></i>
+                                    <div>
+                                        <div class="profile-panel-row-label">ID Number</div>
+                                        <div class="profile-panel-row-value"><?php echo htmlspecialchars($active_conv['id_number'] ?? 'Not set'); ?></div>
+                                    </div>
+                                </div>
+                                <div class="profile-panel-row">
+                                    <i data-lucide="circle-check-big"></i>
+                                    <div>
+                                        <div class="profile-panel-row-label">Account Status</div>
+                                        <div class="profile-panel-row-value"><?php echo htmlspecialchars(ucfirst(strtolower($active_conv['account_status'] ?? 'active'))); ?></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
                 </div>
             </div>
         </div>
     </div>
 
     <!-- NEW CONVERSATION MODAL -->
-    <div id="newConvModal" class="modal-overlay">
-        <div class="modal-box">
+    <div id="newConvModal" class="modal-overlay" style="display: none;">
+        <div class="modal-panel modal-panel--sm" style="max-height: 70vh;">
             <div class="modal-header">
-                <h3>Start New Conversation</h3>
-                <button type="button" class="modal-close-btn" onclick="closeNewConvModal()">&times;</button>
+                <div class="modal-header-text"><h3>Start New Conversation</h3></div>
+                <button type="button" class="modal-close" onclick="closeNewConvModal()">&times;</button>
             </div>
             <div class="modal-search">
                 <div class="search-input-box">
@@ -400,6 +511,11 @@ if ($all_users_result) {
 
     <script src="sidebar.js?v=<?php echo time(); ?>"></script>
     <script>
+        // CSRF token para sa mga AJAX POST na hindi galing sa isang totoong <form>
+        // (delete conversation/message, edit message) — ang chatForm mismo ay may
+        // sarili nang hidden field na csrf_field() na dinagdag sa PHP.
+        const CSRF_TOKEN = "<?php echo csrf_token(); ?>";
+
         lucide.createIcons();
 
         // Kasalukuyang bukas na conversation (0 kung wala) — ginagamit para
@@ -443,7 +559,7 @@ if ($all_users_result) {
             } else {
                 let html = '';
                 if (msg.attachment_path) {
-                    html += `<a href="${msg.attachment_path}" target="_blank" class="msg-attachment">
+                    html += `<a href="download_attachment.php?id=${msg.id}" target="_blank" class="msg-attachment">
                         <i data-lucide="paperclip" style="width:13px; flex-shrink:0;"></i>
                         <span class="msg-attachment-name">${msg.attachment_name}</span>
                     </a>`;
@@ -542,6 +658,7 @@ if ($all_users_result) {
 
                 const formData = new FormData();
                 formData.append('conversation_id', convId);
+                formData.append('csrf_token', CSRF_TOKEN);
 
                 fetch('delete_conversation.php', { method: 'POST', body: formData })
                     .then(res => res.json())
@@ -572,6 +689,7 @@ if ($all_users_result) {
 
                 const formData = new FormData();
                 formData.append('message_id', msgId);
+                formData.append('csrf_token', CSRF_TOKEN);
 
                 fetch('delete_message.php', { method: 'POST', body: formData })
                     .then(res => res.json())
@@ -615,6 +733,7 @@ if ($all_users_result) {
                 const formData = new FormData();
                 formData.append('message_id', msgId);
                 formData.append('new_text', newText);
+                formData.append('csrf_token', CSRF_TOKEN);
 
                 fetch('edit_message.php', { method: 'POST', body: formData })
                     .then(res => res.json())

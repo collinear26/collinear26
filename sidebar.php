@@ -27,6 +27,17 @@ if (isset($_SESSION['user_id'])) {
     }
 }
 ?>
+<!-- MOBILE MENU BUTTON: makikita lang ito sa maliit na screen (via CSS media
+     query) — dahil naka-off-canvas/overlay ang sidebar doon at hindi na
+     maaabot ang collapse button sa loob nito hangga't sarado pa ito. -->
+<button type="button" id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open menu">
+    <i data-lucide="menu" style="width: 20px; height: 20px;"></i>
+</button>
+
+<!-- BACKDROP: lumalabas lang kapag bukas ang mobile drawer, pinipindot para
+     isara ito nang hindi kailangang hanapin pa ang close button -->
+<div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
 <div class="sidebar" id="sidebar">
     <div class="brand">
         <div class="brand-logo">

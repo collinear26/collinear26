@@ -2,6 +2,7 @@
 session_start();
 include 'db_conn.php';
 include 'log_activity.php'; // I-include ang audit logger
+include 'csrf.php';
 
 // Suriin kung naka-login ang user
 if (!isset($_SESSION['user_id'])) {
@@ -17,6 +18,7 @@ if (strtolower(trim($_SESSION['user_type'] ?? '')) !== 'admin') {
 
 // Kunin ang ID ng dokumento mula sa POST form
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id'])) {
+    require_csrf();
     $doc_id = intval($_POST['id']);
     $user_id = $_SESSION['user_id'];
 
