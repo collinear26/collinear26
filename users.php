@@ -137,6 +137,10 @@ if (isset($_GET['status'])) {
         if (localStorage.getItem('sidebar-collapsed') === 'true') {
             document.documentElement.classList.add('sidebar-is-collapsed');
         }
+        var savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark' || savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
     </script>
 </head>
 <body>
@@ -213,13 +217,13 @@ if (isset($_GET['status'])) {
                                             <div style="display: flex; align-items: center; gap: 8px;">
                                                 <strong><?php echo htmlspecialchars($row['firstname'] . ' ' . $row['lastname']); ?></strong>
                                                 <?php if ($is_me): ?>
-                                                    <span style="background: rgba(6, 78, 59, 0.15); color: #064e3b; font-size: 9.5px; font-weight: 800; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(6, 78, 59, 0.3);">YOU</span>
+                                                    <span style="background: var(--brand-soft-15); color: var(--brand); font-size: 9.5px; font-weight: 800; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(6, 78, 59, 0.3);">YOU</span>
                                                 <?php endif; ?>
                                             </div>
                                         </td>
                                         <td>
                                             <?php echo htmlspecialchars($row['email']); ?>
-                                            <span style="display: block; font-size: 10px; color: #64748b;"><?php echo htmlspecialchars(isset($row['id_number']) ? $row['id_number'] : ''); ?></span>
+                                            <span style="display: block; font-size: 10px; color: var(--text-muted);"><?php echo htmlspecialchars(isset($row['id_number']) ? $row['id_number'] : ''); ?></span>
                                         </td>
                                         <td><?php echo htmlspecialchars($row['department']); ?></td>
                                         <td>
@@ -235,7 +239,7 @@ if (isset($_GET['status'])) {
                                             <span class="badge <?php echo $badge_class; ?>"><?php echo ucfirst($status); ?></span>
                                         </td>
                                         <td>
-                                            <span style="font-size: 11px; color: #475569;">
+                                            <span style="font-size: 11px; color: var(--status-neutral-text);">
                                                 <?php echo isset($row['created_at']) && !empty($row['created_at']) ? date('M d, Y', strtotime($row['created_at'])) : 'N/A'; ?>
                                             </span>
                                         </td>
@@ -274,7 +278,7 @@ if (isset($_GET['status'])) {
                                 <?php endwhile; ?>
                             <?php else: ?>
                                 <tr>
-                                    <td colspan="7" style="text-align: center; color: #64748b; padding: 24px;">No user accounts found matching your criteria.</td>
+                                    <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 24px;">No user accounts found matching your criteria.</td>
                                 </tr>
                             <?php endif; ?>
                         </tbody>
@@ -474,8 +478,8 @@ if (isset($_GET['status'])) {
     </div>
 
     <!-- Toast Notification Container -->
-    <div id="toastNotification" style="position: fixed; bottom: 20px; right: 20px; background: #064e3b; color: #ffffff; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: none; align-items: center; gap: 10px; z-index: 1100; font-size: 13px; font-weight: 500;">
-        <i data-lucide="check-circle" id="toastIcon" style="width: 16px; color: #34d399;"></i>
+    <div id="toastNotification" style="position: fixed; bottom: 20px; right: 20px; background: var(--brand-solid); color: var(--white); padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px var(--shadow-medium); display: none; align-items: center; gap: 10px; z-index: 1100; font-size: 13px; font-weight: 500;">
+        <i data-lucide="check-circle" id="toastIcon" style="width: 16px; color: var(--toast-success-icon);"></i>
         <span id="toastMessage">Action completed.</span>
     </div>
 
@@ -557,8 +561,8 @@ if (isset($_GET['status'])) {
                 confirmButtonText: isApprove ? 'Yes, Approve' : 'Yes, Reject',
                 cancelButtonText: 'Cancel',
                 reverseButtons: true,
-                confirmButtonColor: isApprove ? '#166534' : '#dc2626',
-                cancelButtonColor: '#64748b'
+                confirmButtonColor: isApprove ? 'var(--brand)' : 'var(--status-danger-solid)',
+                cancelButtonColor: 'var(--text-muted)'
             }).then((result) => {
                 if (result.isConfirmed) form.submit();
             });
@@ -572,13 +576,13 @@ if (isset($_GET['status'])) {
             document.getElementById('toastMessage').innerText = message;
 
             if (type === 'error') {
-                toast.style.background = '#7f1d1d';
+                toast.style.background = 'var(--toast-danger-bg)';
                 toastIcon.setAttribute('data-lucide', 'x-circle');
-                toastIcon.style.color = '#fca5a5';
+                toastIcon.style.color = 'var(--toast-danger-icon)';
             } else {
-                toast.style.background = '#064e3b';
+                toast.style.background = 'var(--brand-solid)';
                 toastIcon.setAttribute('data-lucide', 'check-circle');
-                toastIcon.style.color = '#34d399';
+                toastIcon.style.color = 'var(--toast-success-icon)';
             }
 
             toast.style.display = 'flex';

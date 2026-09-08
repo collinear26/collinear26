@@ -24,6 +24,10 @@ $result = mysqli_query($conn, $query);
         if (localStorage.getItem('sidebar-collapsed') === 'true') {
             document.documentElement.classList.add('sidebar-is-collapsed');
         }
+        var savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark' || savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
     </script>
     <style>
         /* Truncation style para sa table view */
@@ -50,8 +54,8 @@ $result = mysqli_query($conn, $query);
         .info-tooltip-text {
             visibility: hidden;
             width: 180px;
-            background-color: #0f172a;
-            color: #fff;
+            background-color: var(--text-primary);
+            color: var(--white);
             text-align: center;
             border-radius: 6px;
             padding: 6px 8px;
@@ -63,7 +67,7 @@ $result = mysqli_query($conn, $query);
             transition: opacity 0.2s;
             font-size: 11px;
             font-weight: 500;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            box-shadow: 0 4px 10px var(--shadow-medium);
         }
         .info-tooltip-container:hover .info-tooltip-text {
             visibility: visible;
@@ -90,7 +94,7 @@ $result = mysqli_query($conn, $query);
                         
                         <!-- Info Icon na may hover tooltip sa upper right -->
                         <div class="info-tooltip-container" style="cursor: pointer;">
-                            <div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(6, 78, 59, 0.1); color: #064e3b; display: flex; align-items: center; justify-content: center;">
+                            <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--brand-soft-10); color: var(--brand); display: flex; align-items: center; justify-content: center;">
                                 <i data-lucide="info" style="width: 16px; height: 16px;"></i>
                             </div>
                             <span class="info-tooltip-text">Click any row to view complete details and description.</span>
@@ -136,8 +140,8 @@ $result = mysqli_query($conn, $query);
                                         <td><?php echo $formatted_time; ?></td>
                                         <td><strong><?php echo htmlspecialchars($display_user); ?></strong></td>
                                         <td>
-                                            <span style="font-weight: 600; color: #166534;"><?php echo htmlspecialchars($action_text); ?></span><br>
-                                            <span class="truncate-cell" style="font-size: 12px; color: #64748b;">
+                                            <span style="font-weight: 600; color: var(--brand);"><?php echo htmlspecialchars($action_text); ?></span><br>
+                                            <span class="truncate-cell" style="font-size: 12px; color: var(--text-muted);">
                                                 <?php echo htmlspecialchars($desc_text); ?>
                                             </span>
                                         </td>
@@ -146,7 +150,7 @@ $result = mysqli_query($conn, $query);
                                 <?php endwhile; ?>
                             <?php else: ?>
                                 <tr>
-                                    <td colspan="4" style="text-align: center; color: #64748b; padding: 24px;">No system audit logs found.</td>
+                                    <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 24px;">No system audit logs found.</td>
                                 </tr>
                             <?php endif; ?>
                         </tbody>
@@ -161,7 +165,7 @@ $result = mysqli_query($conn, $query);
         <div class="modal-panel modal-panel--lg">
             <div class="modal-header">
                 <div class="modal-header-text">
-                    <span class="modal-subtitle" style="text-transform: uppercase; font-weight: 700; color: #166534; letter-spacing: .04em;">Aurora State College of Technology</span>
+                    <span class="modal-subtitle" style="text-transform: uppercase; font-weight: 700; color: var(--brand); letter-spacing: .04em;">Aurora State College of Technology</span>
                     <h3>Audit Log Details <strong id="modal_action" class="modal-badge"></strong></h3>
                 </div>
                 <button type="button" onclick="closeAuditModal()" class="modal-close">&times;</button>
@@ -176,7 +180,7 @@ $result = mysqli_query($conn, $query);
                     </div>
                     <div class="modal-info-item">
                         <span class="modal-info-label">IP Address</span>
-                        <code id="modal_ip" style="color: #0f172a; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 13px;"></code>
+                        <code id="modal_ip" style="color: var(--text-primary); background: var(--surface-hover); padding: 2px 6px; border-radius: 4px; font-size: 13px;"></code>
                     </div>
                     <div class="modal-info-item" style="grid-column: span 2;">
                         <span class="modal-info-label">User Handler</span>
@@ -187,7 +191,7 @@ $result = mysqli_query($conn, $query);
 
             <div class="modal-section">
                 <span class="modal-section-title">Complete Description & Details</span>
-                <div id="modal_description" style="margin: 0; color: #334155; font-size: 13px; line-height: 1.5; word-break: break-word;"></div>
+                <div id="modal_description" style="margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; word-break: break-word;"></div>
             </div>
 
             </div>

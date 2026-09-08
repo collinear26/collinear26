@@ -3,14 +3,20 @@ session_start();
 include 'db_conn.php';
 include 'log_activity.php'; // I-include ang audit logger
 include 'csrf.php';
+include 'document_access.php';
 
-// Auth check + admin-only (Records Unit oversight ang release/dissemination)
+// Admin/Records Unit (master scope) ang may access dito (BUG FIX: dating
+// admin-lang ang gate, kaya nakikita na ni Janard/Gerald/Mike Erwin — mga
+// Records Unit OFFICER — ang Release/Disseminate button sa documents.php
+// [matapos maiwiden ang UI gate doon], pero tinatanggihan pa rin sila dito
+// sa backend — "You are not authorized" kahit tama namang sila ang dapat
+// makagawa nito)
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
 }
 
-if (strtolower(trim($_SESSION['user_type'] ?? '')) !== 'admin') {
+if (!is_master_scope_user()) {
     header("Location: documents.php?error=unauthorized");
     exit();
 }
@@ -34,13 +40,24 @@ if ($document_id <= 0 || !in_array($release_type, ['internal', 'external'], true
 }
 
 // Kunin muna ang document — kailangan existing talaga ito bago tuloy
-$doc_stmt = mysqli_prepare($conn, "SELECT title, department FROM documents WHERE id = ?");
+$doc_stmt = mysqli_prepare($conn, "SELECT title, department, tracking_status FROM documents WHERE id = ?");
 mysqli_stmt_bind_param($doc_stmt, "i", $document_id);
 mysqli_stmt_execute($doc_stmt);
 $doc_row = mysqli_fetch_assoc(mysqli_stmt_get_result($doc_stmt));
 
 if (!$doc_row) {
     header("Location: documents.php?error=notfound");
+    exit();
+}
+
+// GAP FIX: dating walang tsek dito kung ano ang kasalukuyang tracking_status
+// ng document — ibig sabihin, kahit "Submitted" pa lang ito (hindi pa
+// na-Receive & Stamp) o "Returned" (ibinalik dahil sa maling pagkaka-encode),
+// pwede pa rin itong i-Release/Disseminate, kahit na sa totoong proseso ay
+// dapat na-log/na-stamp muna bago pa man ito lumabas kahit saan (kaparehong
+// prinsipyo ng na-fix na sa Forward sa Approvals).
+if (in_array(strtolower($doc_row['tracking_status'] ?? ''), ['submitted', 'returned'], true)) {
+    header("Location: documents.php?error=notreceived");
     exit();
 }
 

@@ -101,6 +101,80 @@ $result = mysqli_stmt_get_result($stmt);
 // Listahan ng mga rehistradong opisina, gagamitin bilang mga pipiliang
 // opisina/recipient sa Release/Disseminate modal
 $known_departments = array_map(function ($d) { return $d['name']; }, get_active_departments($conn));
+
+// TOAST FEEDBACK (BUG FIX: dating wala talagang display ang page na ito kahit
+// na maraming action handler ang nag-re-redirect dito na may ?success=/
+// ?error=/?updated=/?msg= — ibig sabihin, kahit magtagumpay o mabigo ang isang
+// aksyon (kasama na ang bagong Receive & Stamp / Return for Correction),
+// walang anumang nakikita ang user — parang "walang nangyari" kahit
+// tuluyan nang na-block o na-save ang aksyon sa likod)
+$toast_message = '';
+$toast_type = 'success';
+if (isset($_GET['success'])) {
+    switch ($_GET['success']) {
+        case 'received':
+            $toast_message = 'Document received and stamped successfully.';
+            break;
+        case 'returned':
+            $toast_message = 'Document returned for correction.';
+            break;
+        case 'released':
+            $toast_message = 'Document released/disseminated successfully.';
+            break;
+        default:
+            $toast_message = 'Action completed successfully.';
+    }
+} elseif (isset($_GET['updated'])) {
+    $toast_message = 'Document updated successfully.';
+} elseif (isset($_GET['msg']) && $_GET['msg'] === 'restored') {
+    $toast_message = 'Document restored successfully.';
+} elseif (isset($_GET['error'])) {
+    switch ($_GET['error']) {
+        case 'unauthorized':
+            $toast_message = 'You are not authorized to perform this action.';
+            $toast_type = 'error';
+            break;
+        case 'stamp_required':
+            $toast_message = 'Stamp Date, Stamp Time, and Signatory are all required to Receive & Stamp a document.';
+            $toast_type = 'error';
+            break;
+        case 'reason_required':
+            $toast_message = 'A reason is required to Return a document for correction.';
+            $toast_type = 'error';
+            break;
+        case 'notfound':
+            $toast_message = 'Document not found, or it is no longer in the expected status for this action.';
+            $toast_type = 'error';
+            break;
+        case 'notreceived':
+            $toast_message = 'This document must be Received & Stamped first before it can be released or disseminated.';
+            $toast_type = 'error';
+            break;
+        case 'archivefailed':
+            $toast_message = 'Could not archive this document. Please try again.';
+            $toast_type = 'error';
+            break;
+        case 'updatefailed':
+            $toast_message = 'Could not update this document. Please try again.';
+            $toast_type = 'error';
+            break;
+        case 'invalidtype':
+            $toast_message = 'Invalid routing type for release.';
+            $toast_type = 'error';
+            break;
+        case 'norecipients':
+            $toast_message = 'Please select at least one recipient for dissemination.';
+            $toast_type = 'error';
+            break;
+        case 'missingrelease':
+            $toast_message = 'Please select a release/dissemination method.';
+            $toast_type = 'error';
+            break;
+        default:
+            $toast_message = 'Something went wrong. Please try again.';
+            $toast_type = 'error';
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -117,7 +191,17 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
         if (localStorage.getItem('sidebar-collapsed') === 'true') {
             document.documentElement.classList.add('sidebar-is-collapsed');
         }
+        var savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark' || savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
     </script>
+    <style>
+        @keyframes toastSlideIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes toastSlideOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(12px); } }
+        #toastNotification.toast-show { animation: toastSlideIn 0.25s ease-out forwards; }
+        #toastNotification.toast-hide { animation: toastSlideOut 0.2s ease-in forwards; }
+    </style>
 </head>
 <body>
 
@@ -155,12 +239,12 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                     <!-- TOOLBAR (Search & Filters) -->
                     <form method="GET" action="documents.php" class="table-toolbar" style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
                         <div class="left-controls" style="display: flex; gap: 10px; align-items: center;">
-                            <div class="search-box" style="display: flex; align-items: center; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px;">
-                                <i data-lucide="search" style="width: 14px; color: #64748b; margin-right: 6px;"></i>
+                            <div class="search-box" style="display: flex; align-items: center; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; padding: 4px 8px;">
+                                <i data-lucide="search" style="width: 14px; color: var(--text-muted); margin-right: 6px;"></i>
                                 <input type="text" name="search" value="<?php echo htmlspecialchars($search); ?>" placeholder="Search by title, control no, sender..." style="border: none; outline: none; font-size: 13px;">
                             </div>
 
-                            <select name="category" class="filter-select" onchange="this.form.submit()" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: #fff;">
+                            <select name="category" class="filter-select" onchange="this.form.submit()" style="padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 6px; font-size: 13px; background: var(--surface);">
                                 <option value="">All Categories</option>
                                 <?php
                                     // Kunin ang document types mula mismo sa Categories module (dati,
@@ -176,7 +260,7 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                                 ?>
                             </select>
 
-                            <select name="status" class="filter-select" onchange="this.form.submit()" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: #fff;">
+                            <select name="status" class="filter-select" onchange="this.form.submit()" style="padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 6px; font-size: 13px; background: var(--surface);">
                                 <option value="">All Tracking Status</option>
                                 <option value="Submitted" <?php echo ($status === 'Submitted') ? 'selected' : ''; ?>>Submitted</option>
                                 <option value="Received" <?php echo ($status === 'Received') ? 'selected' : ''; ?>>Received</option>
@@ -187,7 +271,7 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                             </select>
 
                             <?php if (!empty($search) || !empty($category) || !empty($status)): ?>
-                                <a href="documents.php" style="font-size: 12px; color: #166534; text-decoration: underline; font-weight: 600;">Reset</a>
+                                <a href="documents.php" style="font-size: 12px; color: var(--brand); text-decoration: underline; font-weight: 600;">Reset</a>
                             <?php endif; ?>
                         </div>
 
@@ -215,7 +299,7 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                                         <td>
                                             <strong>#REC-<?php echo htmlspecialchars($row['id'] ?? '0000'); ?></strong>
                                             <?php if (!empty($row['is_confidential'])): ?>
-                                                <span style="display: inline-block; background: #fee2e2; color: #991b1b; font-size: 10px; padding: 2px 5px; border-radius: 4px; font-weight: 700; margin-left: 4px;">CONFIDENTIAL</span>
+                                                <span class="badge-confidential" style="margin-left: 4px;">CONFIDENTIAL</span>
                                             <?php endif; ?>
                                         </td>
                                         <td>
@@ -229,7 +313,7 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                                         </td>
                                         <td>
                                             <?php echo htmlspecialchars($row['category'] ?? 'General'); ?><br>
-                                            <small style="color: #64748b;"><?php echo htmlspecialchars($row['classification'] ?? 'Internal'); ?> / <?php echo htmlspecialchars($row['routing_type'] ?? 'Receive'); ?></small>
+                                            <small style="color: var(--text-muted);"><?php echo htmlspecialchars($row['classification'] ?? 'Internal'); ?> / <?php echo htmlspecialchars($row['routing_type'] ?? 'Receive'); ?></small>
                                         </td>
                                         <td>
                                             <div class="truncate-cell" title="<?php echo htmlspecialchars($row['sender'] ?? 'Office'); ?>">
@@ -246,17 +330,24 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                                                 if ($row_status === 'released') $badge_class = 'status-released';
                                                 if ($row_status === 'submitted') $badge_class = 'status-submitted';
                                                 if ($row_status === 'completed') $badge_class = 'status-completed';
+                                                if ($row_status === 'returned') $badge_class = 'status-overdue';
                                             ?>
                                             <span class="status-badge <?php echo $badge_class; ?>"><?php echo ucfirst($row_status); ?></span>
                                         </td>
                                         <td>
-                                            <?php 
+                                            <?php
+                                                // DISPLAY LABELS LANG ITO — hindi ito approve/reject na desisyon sa
+                                                // laman ng request (wala nga niyan sa totoong proseso). Ang
+                                                // approval_status ay bunga na lang ngayon ng Receive & Stamp
+                                                // (Approved) o Return for Correction (Rejected) — kaya iba na ang
+                                                // salitang ipinapakita rito kaysa sa raw column value.
                                                 $approval = strtolower($row['approval_status'] ?? 'pending');
                                                 $approval_class = 'badge-pending';
-                                                if ($approval === 'approved') $approval_class = 'badge-active';
-                                                if ($approval === 'rejected') $approval_class = 'badge-inactive';
+                                                $approval_label = 'Awaiting Stamp';
+                                                if ($approval === 'approved') { $approval_class = 'badge-active'; $approval_label = 'Received & Logged'; }
+                                                if ($approval === 'rejected') { $approval_class = 'badge-inactive'; $approval_label = 'Returned'; }
                                             ?>
-                                            <span class="badge <?php echo $approval_class; ?>"><?php echo ucfirst($approval); ?></span>
+                                            <span class="badge <?php echo $approval_class; ?>"><?php echo htmlspecialchars($approval_label); ?></span>
                                         </td>
                                         <td>
                                             <?php $can_access = can_access_document($row); ?>
@@ -297,7 +388,7 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                                                     </button>
                                                 <?php endif; ?>
 
-                                                <?php if (strtolower(trim($_SESSION['user_type'] ?? '')) === 'admin'): ?>
+                                                <?php if ($is_master): ?>
                                                     <!-- Edit Button -->
                                                     <button type="button" class="row-actions-item btn-edit" title="Edit"
                                                         data-id="<?php echo $row['id']; ?>"
@@ -318,22 +409,29 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                                                     </button>
 
                                                     <?php if ($row_status === 'submitted'): ?>
-                                                        <button type="button" class="row-actions-item" title="Receive (Records Unit acknowledges custody)" onclick="openReceiveModal(<?php echo (int) $row['id']; ?>, '<?php echo htmlspecialchars($row['title'] ?? '', ENT_QUOTES); ?>', '<?php echo htmlspecialchars($row['department'] ?? '', ENT_QUOTES); ?>')" style="color: #166534;">
-                                                            <i data-lucide="inbox"></i> Receive
+                                                        <button type="button" class="row-actions-item" title="Receive &amp; Stamp (Records Unit acknowledges custody)" onclick='openReceiveModal(<?php echo (int) $row['id']; ?>, <?php echo json_encode($row['title'] ?? '', JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP); ?>, <?php echo json_encode($row['department'] ?? '', JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP); ?>)' style="color: var(--brand);">
+                                                            <i data-lucide="inbox"></i> Receive &amp; Stamp
+                                                        </button>
+                                                        <button type="button" class="row-actions-item" title="Return for Correction (mali ang pagkaka-encode, hindi pa dapat i-stamp)" onclick='openReturnModal(<?php echo (int) $row['id']; ?>, <?php echo json_encode($row['title'] ?? '', JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP); ?>)' style="color: var(--status-danger-text);">
+                                                            <i data-lucide="undo-2"></i> Return for Correction
                                                         </button>
                                                     <?php endif; ?>
 
-                                                    <button type="button" class="row-actions-item" title="Release / Disseminate" onclick="openReleaseModal(<?php echo (int) $row['id']; ?>)" style="color: #1d4ed8;">
+                                                    <?php if (!in_array($row_status, ['submitted', 'returned'], true)): ?>
+                                                    <button type="button" class="row-actions-item" title="Release / Disseminate" onclick="openReleaseModal(<?php echo (int) $row['id']; ?>)" style="color: var(--status-info-text);">
                                                         <i data-lucide="send"></i> Release / Disseminate
                                                     </button>
+                                                    <?php endif; ?>
 
+                                                    <?php if ($row_status !== 'archived'): ?>
                                                     <form method="POST" action="archive_document.php" class="inline-approval-form" id="archive-form-<?php echo $row['id']; ?>">
                                                         <?php csrf_field(); ?>
                                                         <input type="hidden" name="id" value="<?php echo $row['id']; ?>">
-                                                        <button type="button" class="row-actions-item" title="Archive" onclick="openArchiveModal('archive-form-<?php echo $row['id']; ?>')" style="color: #d97706;">
+                                                        <button type="button" class="row-actions-item" title="Archive" onclick="openArchiveModal('archive-form-<?php echo $row['id']; ?>')" style="color: var(--status-warning-text);">
                                                             <i data-lucide="archive"></i> Archive
                                                         </button>
                                                     </form>
+                                                    <?php endif; ?>
                                                 <?php endif; ?>
                                                 </div>
                                             </div>
@@ -342,7 +440,7 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                                 <?php endwhile; ?>
                             <?php else: ?>
                                 <tr>
-                                    <td colspan="8" style="text-align: center; padding: 20px; color: #64748b;">No documents found in the database.</td>
+                                    <td colspan="8" style="text-align: center; padding: 20px; color: var(--text-muted);">No documents found in the database.</td>
                                 </tr>
                             <?php endif; ?>
                         </tbody>
@@ -360,19 +458,19 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                             ?>
 
                             <?php if ($page > 1): ?>
-                                <a href="<?php echo $pagination_prefix . ($page - 1); ?>" class="page-btn" style="text-decoration: none; padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; color: #334155; font-size: 13px;">Previous</a>
+                                <a href="<?php echo $pagination_prefix . ($page - 1); ?>" class="page-btn" style="text-decoration: none; padding: 6px 12px; border: 1px solid var(--border-strong); border-radius: 6px; color: var(--text-secondary); font-size: 13px;">Previous</a>
                             <?php else: ?>
-                                <span class="page-btn" style="padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 6px; color: #94a3b8; font-size: 13px; cursor: not-allowed; background: #f8fafc;">Previous</span>
+                                <span class="page-btn" style="padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-faint); font-size: 13px; cursor: not-allowed; background: var(--surface-alt);">Previous</span>
                             <?php endif; ?>
 
                             <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                                <a href="<?php echo $pagination_prefix . $i; ?>" class="page-btn <?php echo ($page == $i) ? 'active' : ''; ?>" style="text-decoration: none; padding: 6px 12px; border: 1px solid <?php echo ($page == $i) ? '#166534' : '#cbd5e1'; ?>; background: <?php echo ($page == $i) ? '#166534' : '#fff'; ?>; color: <?php echo ($page == $i) ? '#fff' : '#334155'; ?>; border-radius: 6px; font-size: 13px; font-weight: 600;"><?php echo $i; ?></a>
+                                <a href="<?php echo $pagination_prefix . $i; ?>" class="page-btn <?php echo ($page == $i) ? 'active' : ''; ?>" style="text-decoration: none; padding: 6px 12px; border: 1px solid <?php echo ($page == $i) ? 'var(--brand)' : 'var(--border-strong)'; ?>; background: <?php echo ($page == $i) ? 'var(--brand)' : 'var(--surface)'; ?>; color: <?php echo ($page == $i) ? 'var(--surface)' : 'var(--text-secondary)'; ?>; border-radius: 6px; font-size: 13px; font-weight: 600;"><?php echo $i; ?></a>
                             <?php endfor; ?>
 
                             <?php if ($page < $total_pages): ?>
-                                <a href="<?php echo $pagination_prefix . ($page + 1); ?>" class="page-btn" style="text-decoration: none; padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; color: #334155; font-size: 13px;">Next</a>
+                                <a href="<?php echo $pagination_prefix . ($page + 1); ?>" class="page-btn" style="text-decoration: none; padding: 6px 12px; border: 1px solid var(--border-strong); border-radius: 6px; color: var(--text-secondary); font-size: 13px;">Next</a>
                             <?php else: ?>
-                                <span class="page-btn" style="padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 6px; color: #94a3b8; font-size: 13px; cursor: not-allowed; background: #f8fafc;">Next</span>
+                                <span class="page-btn" style="padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-faint); font-size: 13px; cursor: not-allowed; background: var(--surface-alt);">Next</span>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -396,7 +494,7 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
             transition: background-color 0.15s ease;
         }
         #documentsTable tbody tr.clickable-doc-row:hover {
-            background-color: #f8fafc;
+            background-color: var(--surface-alt);
         }
         .truncate-cell {
             max-width: 260px;
@@ -519,8 +617,13 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                 <?php else: ?>
                 <div class="modal-section">
                     <span class="modal-section-title">Submitting Department</span>
-                    <span style="display: block; font-size: 13.5px; font-weight: 600; color: #166534;"><?php echo htmlspecialchars($my_department ?: 'Not set — contact your Admin'); ?></span>
+                    <span style="display: block; font-size: 13.5px; font-weight: 600; color: var(--brand);"><?php echo htmlspecialchars($my_department ?: 'Not set — contact your Admin'); ?></span>
                     <span class="modal-hint">Automatically detected from your account — this cannot be changed here.</span>
+                </div>
+                <div class="modal-field">
+                    <label>Instructions / Distribution Notes <span class="hint">(optional)</span></label>
+                    <textarea name="op_notes" placeholder="e.g. Please disseminate to OVPAA and OVPAPF" rows="2"></textarea>
+                    <span class="modal-hint">If this needs to be routed or disseminated to specific offices, say so here — Records Unit will see this when they process it.</span>
                 </div>
                 <div class="modal-note">
                     <i data-lucide="info" style="width: 13px; flex-shrink: 0;"></i>
@@ -537,7 +640,7 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                     <div class="modal-field">
                         <label>Attach Document File (PDF, DOCX, DOC, JPG, PNG) <span class="hint">— optional, Records Unit can attach the scanned copy later</span></label>
                         <input type="file" name="document_file" id="newDocFileInput" accept=".pdf,.docx,.doc,.jpg,.jpeg,.png" style="display: none;" onchange="updateFileLabel(this, 'newDocFileLabel')">
-                        <label for="newDocFileInput" id="newDocFileLabel" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; border: 1.5px dashed #94a3b8; border-radius: 8px; font-size: 13px; color: #64748b; cursor: pointer; background: #ffffff; box-sizing: border-box;" onmouseover="this.style.borderColor='#166534'; this.style.background='#f0fdf4';" onmouseout="this.style.borderColor='#94a3b8'; this.style.background='#ffffff';">
+                        <label for="newDocFileInput" id="newDocFileLabel" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; border: 1.5px dashed var(--text-faint); border-radius: 8px; font-size: 13px; color: var(--text-muted); cursor: pointer; background: var(--surface); box-sizing: border-box;" onmouseover="this.style.borderColor='var(--brand)'; this.style.background='var(--success-soft-bg)';" onmouseout="this.style.borderColor='var(--text-faint)'; this.style.background='var(--surface)';">
                             <i data-lucide="upload" style="width: 15px; flex-shrink: 0;"></i>
                             <span>Click to choose a file, or drag it here (optional)</span>
                         </label>
@@ -640,12 +743,12 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                      dapat baguhin ang mga ito. -->
                 <div class="modal-section">
                     <span class="modal-section-title">OP Notes / Instructions <span style="font-weight:normal; text-transform:none;">(read-only)</span></span>
-                    <p id="edit_op_notes_display" style="margin: 0; font-size: 13px; color: #334155; white-space: pre-line;">—</p>
+                    <p id="edit_op_notes_display" style="margin: 0; font-size: 13px; color: var(--text-secondary); white-space: pre-line;">—</p>
                     <span class="modal-hint">Added via the Forward/Instruction action in Approvals — not editable here.</span>
                 </div>
                 <div class="modal-section">
                     <span class="modal-section-title">Dissemination Method <span style="font-weight:normal; text-transform:none;">(read-only)</span></span>
-                    <p id="edit_dissemination_method_display" style="margin: 0; font-size: 13px; color: #334155;">—</p>
+                    <p id="edit_dissemination_method_display" style="margin: 0; font-size: 13px; color: var(--text-secondary);">—</p>
                     <span class="modal-hint">Set via the Release/Disseminate action — not editable here.</span>
                 </div>
 
@@ -668,7 +771,7 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
         <div class="modal-panel modal-panel--lg">
             <div class="modal-header">
                 <div class="modal-header-text">
-                    <span class="modal-subtitle" style="text-transform: uppercase; font-weight: 700; color: #166534; letter-spacing: .04em;">Aurora State College of Technology</span>
+                    <span class="modal-subtitle" style="text-transform: uppercase; font-weight: 700; color: var(--brand); letter-spacing: .04em;">Aurora State College of Technology</span>
                     <h3>Official Document Record <strong id="view_tracking" class="modal-badge"></strong></h3>
                 </div>
                 <button type="button" onclick="closeViewModal()" class="modal-close">&times;</button>
@@ -677,13 +780,13 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
 
             <div class="modal-section">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
-                    <p id="view_title" style="margin: 0; font-size: 19px; font-weight: 700; color: #0f172a;"></p>
+                    <p id="view_title" style="margin: 0; font-size: 19px; font-weight: 700; color: var(--text-primary);"></p>
                     <div style="display: flex; gap: 6px; flex-shrink: 0;">
                         <span id="view_status_badge" style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;"></span>
-                        <span id="view_confidential_badge" style="display: none; background: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700;">CONFIDENTIAL</span>
+                        <span id="view_confidential_badge" class="badge-confidential" style="display: none; font-size: 11px;">CONFIDENTIAL</span>
                     </div>
                 </div>
-                <p style="margin: 4px 0 0 0; font-size: 12.5px; color: #64748b;">
+                <p style="margin: 4px 0 0 0; font-size: 12.5px; color: var(--text-muted);">
                     <span id="view_category"></span> &middot; <span id="view_class_routing"></span>
                 </p>
             </div>
@@ -717,11 +820,11 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
 
             <div class="modal-section">
                 <span class="modal-section-title">OP Notes / Instructions</span>
-                <p id="view_op_notes" style="margin: 0; font-size: 13px; color: #334155; font-style: italic;"></p>
+                <p id="view_op_notes" style="margin: 0; font-size: 13px; color: var(--text-secondary); font-style: italic;"></p>
             </div>
 
             <div class="modal-section" style="flex-direction: row; justify-content: space-between; align-items: center;">
-                <div style="font-size: 13px; color: #475569;">
+                <div style="font-size: 13px; color: var(--status-neutral-text);">
                     <i data-lucide="file-text" style="width: 14px; vertical-align: middle; margin-right: 4px;"></i>
                     <span>Attached Document File</span>
                 </div>
@@ -730,7 +833,7 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
 
             </div>
             <div class="modal-footer" style="justify-content: space-between;">
-                <a id="view_history_link" href="#" style="font-size: 12.5px; color: #166534; font-weight: 600; text-decoration: underline; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="history" style="width: 12px;"></i> View Full Tracking History</a>
+                <a id="view_history_link" href="#" style="font-size: 12.5px; color: var(--brand); font-weight: 600; text-decoration: underline; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="history" style="width: 12px;"></i> View Full Tracking History</a>
                 <button type="button" onclick="closeViewModal()" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Close</button>
             </div>
         </div>
@@ -752,10 +855,10 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                 <div class="modal-body">
 
                 <div class="modal-radio-group">
-                    <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#334155; cursor:pointer;">
+                    <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:var(--text-secondary); cursor:pointer;">
                         <input type="radio" name="release_type" value="internal" checked onchange="toggleReleaseType()"> Internal (Multiple Offices)
                     </label>
-                    <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#334155; cursor:pointer;">
+                    <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:var(--text-secondary); cursor:pointer;">
                         <input type="radio" name="release_type" value="external" onchange="toggleReleaseType()"> External Organization
                     </label>
                 </div>
@@ -763,12 +866,19 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                 <div id="internalReleaseFields">
                     <div class="modal-field">
                         <label>Select Recipient Offices</label>
-                        <select name="recipient_departments[]" multiple size="5">
-                            <?php foreach ($known_departments as $dept_option): ?>
-                                <option value="<?php echo htmlspecialchars($dept_option); ?>"><?php echo htmlspecialchars($dept_option); ?></option>
+                        <div class="modal-checkbox-row" style="padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--border);">
+                            <input type="checkbox" id="selectAllRecipients" onchange="toggleSelectAllRecipients(this)">
+                            <label for="selectAllRecipients" style="font-weight: 700;">Select All</label>
+                        </div>
+                        <div style="max-height: 170px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 4px 12px;">
+                            <?php foreach ($known_departments as $dept_index => $dept_option): ?>
+                                <div class="modal-checkbox-row" style="padding: 6px 0;">
+                                    <input type="checkbox" name="recipient_departments[]" id="recipientDept<?php echo (int) $dept_index; ?>" value="<?php echo htmlspecialchars($dept_option); ?>" class="recipient-checkbox" onchange="syncSelectAllRecipients()">
+                                    <label for="recipientDept<?php echo (int) $dept_index; ?>"><?php echo htmlspecialchars($dept_option); ?></label>
+                                </div>
                             <?php endforeach; ?>
-                        </select>
-                        <span class="modal-hint">Hold Ctrl (Windows) or Cmd (Mac) to select more than one office.</span>
+                        </div>
+                        <span class="modal-hint">Check every office that should receive this document.</span>
                     </div>
                 </div>
 
@@ -801,12 +911,15 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
         </div>
     </div>
 
-    <!-- RECEIVE DOCUMENT MODAL (Records Unit acknowledges custody of a Submitted request) -->
+    <!-- RECEIVE & STAMP MODAL (Records Unit acknowledges custody of a Submitted
+         request AND records the physical stamp — Date/Time/Signatory. Ito
+         mismo ang totoong "Receive-Tatak-Logbook" na proseso, hindi na isang
+         hiwalay na "Approve" na desisyon.) -->
     <div id="receiveDocumentModal" class="modal-overlay" style="display: none;">
         <div class="modal-panel modal-panel--sm">
             <div class="modal-header">
                 <div class="modal-header-text">
-                    <h3>Receive Document</h3>
+                    <h3>Receive &amp; Stamp</h3>
                     <p id="receiveDocInfo" class="modal-subtitle"></p>
                 </div>
                 <button type="button" onclick="closeReceiveModal()" class="modal-close">&times;</button>
@@ -815,6 +928,27 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                 <?php csrf_field(); ?>
                 <input type="hidden" name="document_id" id="receive_document_id">
                 <div class="modal-body">
+
+                <div class="modal-note">
+                    <i data-lucide="stamp" style="width: 13px; flex-shrink: 0;"></i>
+                    <span>Fill in the official receiving stamp — this is the same Date/Time/Signature written on the physical document.</span>
+                </div>
+
+                <div class="modal-grid-2">
+                    <div class="modal-field">
+                        <label>Stamp Date</label>
+                        <input type="date" name="stamped_date" id="receive_stamped_date" required>
+                    </div>
+                    <div class="modal-field">
+                        <label>Stamp Time</label>
+                        <input type="time" name="stamped_time" id="receive_stamped_time" required>
+                    </div>
+                </div>
+
+                <div class="modal-field">
+                    <label>Signatory <span class="hint">(who signed/received it)</span></label>
+                    <input type="text" name="signatory" id="receive_signatory" required placeholder="e.g. Juan Dela Cruz, Records Officer">
+                </div>
 
                 <div class="modal-field">
                     <label>Attach Scanned Copy <span class="hint">(optional — if this was submitted physically)</span></label>
@@ -829,7 +963,43 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                 </div>
                 <div class="modal-footer">
                     <button type="button" onclick="closeReceiveModal()" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Cancel</button>
-                    <button type="submit" class="modal-btn modal-btn-primary"><i data-lucide="check"></i> Confirm Receipt</button>
+                    <button type="submit" class="modal-btn modal-btn-primary"><i data-lucide="check"></i> Confirm Receipt &amp; Stamp</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- RETURN FOR CORRECTION MODAL (rare escape hatch — hindi ito "tinatanggihan
+         ang request", para lang ito sa mga maling pagkaka-encode na dapat
+         ayusin muna bago ma-receive/ma-stamp) -->
+    <div id="returnDocumentModal" class="modal-overlay" style="display: none;">
+        <div class="modal-panel modal-panel--sm">
+            <div class="modal-header">
+                <div class="modal-header-text">
+                    <h3>Return for Correction</h3>
+                    <p id="returnDocInfo" class="modal-subtitle"></p>
+                </div>
+                <button type="button" onclick="closeReturnModal()" class="modal-close">&times;</button>
+            </div>
+            <form action="return_document.php" method="POST">
+                <?php csrf_field(); ?>
+                <input type="hidden" name="document_id" id="return_document_id">
+                <div class="modal-body">
+
+                <div class="modal-note">
+                    <i data-lucide="info" style="width: 13px; flex-shrink: 0;"></i>
+                    <span>Use this only for a genuinely wrong submission (wrong category, duplicate, etc.) — not to decline the request itself. The submitting department will see this reason and can resubmit.</span>
+                </div>
+
+                <div class="modal-field">
+                    <label>Reason <span class="hint">(required)</span></label>
+                    <textarea name="reason" rows="3" required placeholder="e.g. Wrong category selected — please resubmit under 'Financial Request'."></textarea>
+                </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" onclick="closeReturnModal()" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Cancel</button>
+                    <button type="submit" class="modal-btn" style="background: var(--danger-solid); color: var(--white);"><i data-lucide="undo-2"></i> Return for Correction</button>
                 </div>
             </form>
         </div>
@@ -839,15 +1009,15 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
     <div id="archiveConfirmModal" class="modal-overlay" style="display: none;">
         <div class="modal-panel modal-panel--sm" style="text-align: center;">
             <div class="modal-body" style="align-items: center;">
-                <div style="width: 48px; height: 48px; background: #fef3c7; color: #d97706; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 6px auto 0 auto;">
+                <div style="width: 48px; height: 48px; background: var(--warning-soft-bg); color: var(--status-warning-text); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 6px auto 0 auto;">
                     <i data-lucide="archive" style="width: 24px; height: 24px;"></i>
                 </div>
-                <h3 style="margin: 0; font-size: 18px; color: #0f172a;">Archive Document</h3>
-                <p style="margin: 0; font-size: 14px; color: #64748b;">Are you sure you want to archive this document? This action will move it to the archives.</p>
+                <h3 style="margin: 0; font-size: 18px; color: var(--text-primary);">Archive Document</h3>
+                <p style="margin: 0; font-size: 14px; color: var(--text-muted);">Are you sure you want to archive this document? This action will move it to the archives.</p>
             </div>
             <div class="modal-footer" style="justify-content: center;">
                 <button type="button" onclick="closeArchiveModal()" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Cancel</button>
-                <a id="confirmArchiveBtn" href="#" class="modal-btn" style="background: #d97706; color: #fff; text-decoration: none;"><i data-lucide="archive"></i> Yes, Archive</a>
+                <a id="confirmArchiveBtn" href="#" class="modal-btn" style="background: var(--status-warning-text); color: var(--white); text-decoration: none;"><i data-lucide="archive"></i> Yes, Archive</a>
             </div>
         </div>
     </div>
@@ -873,10 +1043,10 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
         function updateFileLabel(input, labelId) {
             const label = document.getElementById(labelId);
             if (input.files.length > 0) {
-                label.innerHTML = '<i data-lucide="file-check-2" style="width: 15px; flex-shrink: 0; color: #166534;"></i><span style="color:#166534; font-weight:600;">' + input.files[0].name + '</span>';
+                label.innerHTML = '<i data-lucide="file-check-2" style="width: 15px; flex-shrink: 0; color: var(--brand);"></i><span style="color:var(--brand); font-weight:600;">' + input.files[0].name + '</span>';
                 label.style.borderStyle = 'solid';
-                label.style.borderColor = '#166534';
-                label.style.background = '#f0fdf4';
+                label.style.borderColor = 'var(--brand)';
+                label.style.background = 'var(--success-soft-bg)';
                 lucide.createIcons();
             }
         }
@@ -957,11 +1127,11 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                 let statusBadge = document.getElementById('view_status_badge');
                 statusBadge.innerText = status;
                 if(status.toLowerCase() === 'received') {
-                    statusBadge.style.background = '#dcfce7'; statusBadge.style.color = '#166534';
+                    statusBadge.style.background = 'var(--success-soft-bg)'; statusBadge.style.color = 'var(--brand)';
                 } else if(status.toLowerCase() === 'pending') {
-                    statusBadge.style.background = '#fef9c3'; statusBadge.style.color = '#854d0e';
+                    statusBadge.style.background = 'var(--warning-soft-bg)'; statusBadge.style.color = 'var(--status-warning-text)';
                 } else {
-                    statusBadge.style.background = '#fee2e2'; statusBadge.style.color = '#991b1b';
+                    statusBadge.style.background = 'var(--danger-soft-hover)'; statusBadge.style.color = 'var(--status-danger-text)';
                 }
 
                 document.getElementById('view_download_link').href = "download_doc.php?id=" + this.getAttribute('data-id');
@@ -1094,6 +1264,11 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
 
         function openReleaseModal(docId) {
             document.getElementById('release_document_id').value = docId;
+            // I-reset ang mga checkbox tuwing bubukas ang modal — kung hindi,
+            // mananatiling naka-check ang mga opisinang napili sa isang
+            // dokumento kanina kapag binuksan ito ulit para sa ibang dokumento
+            document.querySelectorAll('.recipient-checkbox').forEach(cb => { cb.checked = false; });
+            document.getElementById('selectAllRecipients').checked = false;
             releaseModal.style.display = 'flex';
             lucide.createIcons();
         }
@@ -1106,6 +1281,22 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
             const isInternal = document.querySelector('input[name="release_type"]:checked').value === 'internal';
             document.getElementById('internalReleaseFields').style.display = isInternal ? 'block' : 'none';
             document.getElementById('externalReleaseFields').style.display = isInternal ? 'none' : 'block';
+        }
+
+        // "Select All" checkbox for the recipient offices list — checking it
+        // checks every office; unchecking any single office afterwards
+        // un-checks "Select All" again (syncSelectAllRecipients), so it never
+        // shows a stale "all selected" state once that's no longer true.
+        function toggleSelectAllRecipients(selectAllCheckbox) {
+            document.querySelectorAll('.recipient-checkbox').forEach(cb => {
+                cb.checked = selectAllCheckbox.checked;
+            });
+        }
+
+        function syncSelectAllRecipients() {
+            const boxes = document.querySelectorAll('.recipient-checkbox');
+            const allChecked = Array.from(boxes).every(cb => cb.checked);
+            document.getElementById('selectAllRecipients').checked = allChecked;
         }
 
         // Receive Modal (Records Unit acknowledges custody of a Submitted request)
@@ -1121,6 +1312,69 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
         function closeReceiveModal() {
             receiveModal.style.display = 'none';
         }
+
+        // Return for Correction Modal (rare escape hatch for wrong submissions)
+        const returnModal = document.getElementById('returnDocumentModal');
+
+        function openReturnModal(docId, docTitle) {
+            document.getElementById('return_document_id').value = docId;
+            document.getElementById('returnDocInfo').innerText = docTitle;
+            returnModal.style.display = 'flex';
+            lucide.createIcons();
+        }
+
+        function closeReturnModal() {
+            returnModal.style.display = 'none';
+        }
+
+        // Toast Notification Logic (BUG FIX: dating wala nitong display kahit
+        // matagumpay/mabigo ang isang action — parang "walang nangyari" kahit
+        // ito pala ang dahilan kung bakit "hindi gumana" ang Receive & Stamp)
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toastNotification');
+            const toastIcon = document.getElementById('toastIcon');
+            document.getElementById('toastMessage').innerText = message;
+
+            if (type === 'error') {
+                toast.style.background = 'var(--toast-danger-bg)';
+                toastIcon.setAttribute('data-lucide', 'x-circle');
+                toastIcon.style.color = 'var(--toast-danger-icon)';
+            } else {
+                toast.style.background = 'var(--brand-solid)';
+                toastIcon.setAttribute('data-lucide', 'check-circle');
+                toastIcon.style.color = 'var(--toast-success-icon)';
+            }
+
+            toast.classList.remove('toast-hide');
+            toast.style.display = 'flex';
+            void toast.offsetWidth;
+            toast.classList.add('toast-show');
+            lucide.createIcons();
+
+            setTimeout(() => {
+                toast.classList.remove('toast-show');
+                toast.classList.add('toast-hide');
+                setTimeout(() => {
+                    toast.style.display = 'none';
+                    toast.classList.remove('toast-hide');
+                }, 200);
+            }, 4000);
+        }
+
+        <?php if (!empty($toast_message)): ?>
+            document.addEventListener('DOMContentLoaded', () => {
+                showToast(<?php echo json_encode($toast_message); ?>, <?php echo json_encode($toast_type); ?>);
+                if (window.history.replaceState) {
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+            });
+        <?php endif; ?>
     </script>
+
+    <!-- Toast Notification Container -->
+    <div id="toastNotification" style="position: fixed; bottom: 20px; right: 20px; background: var(--brand-solid); color: var(--white); padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px var(--shadow-medium); display: none; align-items: center; gap: 10px; z-index: 1100; font-size: 13px; font-weight: 500;">
+        <i data-lucide="check-circle" id="toastIcon" style="width: 16px; color: var(--toast-success-icon);"></i>
+        <span id="toastMessage">Action completed.</span>
+    </div>
 </body>
 </html>

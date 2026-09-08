@@ -5,13 +5,18 @@ include 'log_activity.php'; // I-include ang audit logger
 include 'csrf.php';
 include 'upload_validation.php';
 
-// Admin-only: Records Unit ang nagpapatunay ng official custody/receipt
+// Admin/Records Unit (master scope) ang nagpapatunay ng official custody/receipt
+// (BUG FIX: dating admin-lang ang gate na ito, kaya kahit yung mga Records
+// Unit OFFICER — hal. Janard/Gerald/Mike Erwin — ay hindi makapag-Receive
+// kahit sila mismo ang aktwal na gumagawa ng intake na ito sa totoong buhay)
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
 }
 
-if (strtolower(trim($_SESSION['user_type'] ?? '')) !== 'admin') {
+include 'document_access.php';
+
+if (!is_master_scope_user()) {
     header("Location: documents.php?error=unauthorized");
     exit();
 }
@@ -28,8 +33,20 @@ $notes = trim($_POST['notes'] ?? '');
 $user_id = $_SESSION['user_id'];
 $actor_name = trim(($_SESSION['firstname'] ?? '') . ' ' . ($_SESSION['lastname'] ?? '')) ?: 'Unknown User';
 
+// STAMP FIELDS: kinakatawan nito ang totoong pisikal na pagtatatak (Date,
+// Time, Signature) na sinasabi mismo sa totoong proseso — required na ngayon,
+// hindi na optional, dahil ito na ang bumubuo sa "Receive & Stamp" action.
+$stamped_date = trim($_POST['stamped_date'] ?? '');
+$stamped_time = trim($_POST['stamped_time'] ?? '');
+$signatory = trim($_POST['signatory'] ?? '');
+
 if ($document_id <= 0) {
     header("Location: documents.php");
+    exit();
+}
+
+if ($stamped_date === '' || $stamped_time === '' || $signatory === '') {
+    header("Location: documents.php?error=stamp_required");
     exit();
 }
 
@@ -72,13 +89,18 @@ if (isset($_FILES['document_file']) && $_FILES['document_file']['error'] === UPL
 }
 
 // I-update: tracking_status -> 'Received', department -> 'Records Unit'
-// (opisyal na custody na ngayon ang Records Unit), at i-attach ang file kung meron
+// (opisyal na custody na ngayon ang Records Unit), ilagay ang stamp fields,
+// at i-attach ang file kung meron. Ang approval_status ay awtomatikong
+// nagiging 'Approved' dito rin — hindi na ito hiwalay na desisyon
+// (Approve/Reject) na ginagawa sa Approvals page, kundi bunga na lang ng
+// totoong "na-stamp na" na estado ng dokumento (matches sa totoong proseso,
+// walang approve/reject doon — Receive & Stamp lang).
 if ($new_file_path !== null) {
-    $update_stmt = mysqli_prepare($conn, "UPDATE documents SET tracking_status = 'Received', department = 'Records Unit', file_path = ? WHERE id = ?");
-    mysqli_stmt_bind_param($update_stmt, "si", $new_file_path, $document_id);
+    $update_stmt = mysqli_prepare($conn, "UPDATE documents SET tracking_status = 'Received', department = 'Records Unit', approval_status = 'Approved', stamped_date = ?, stamped_time = ?, signatory = ?, file_path = ? WHERE id = ?");
+    mysqli_stmt_bind_param($update_stmt, "ssssi", $stamped_date, $stamped_time, $signatory, $new_file_path, $document_id);
 } else {
-    $update_stmt = mysqli_prepare($conn, "UPDATE documents SET tracking_status = 'Received', department = 'Records Unit' WHERE id = ?");
-    mysqli_stmt_bind_param($update_stmt, "i", $document_id);
+    $update_stmt = mysqli_prepare($conn, "UPDATE documents SET tracking_status = 'Received', department = 'Records Unit', approval_status = 'Approved', stamped_date = ?, stamped_time = ?, signatory = ? WHERE id = ?");
+    mysqli_stmt_bind_param($update_stmt, "sssi", $stamped_date, $stamped_time, $signatory, $document_id);
 }
 mysqli_stmt_execute($update_stmt);
 

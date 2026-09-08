@@ -2,14 +2,17 @@
 session_start();
 include 'db_conn.php';
 include 'csrf.php';
+include 'document_access.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
 }
 
-// Admin-only: Edit Document
-if (strtolower(trim($_SESSION['user_type'] ?? '')) !== 'admin') {
+// Admin/Records Unit (master scope): Edit Document (BUG FIX: dating
+// admin-lang, kaya hindi na tugma sa documents.php na naka-widen na ang
+// row-actions visibility sa $is_master)
+if (!is_master_scope_user()) {
     header("Location: documents.php?error=unauthorized");
     exit();
 }

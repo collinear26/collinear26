@@ -122,6 +122,10 @@ if (isset($_GET['success'])) {
         if (localStorage.getItem('sidebar-collapsed') === 'true') {
             document.documentElement.classList.add('sidebar-is-collapsed');
         }
+        var savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark' || savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
     </script>
 
     <style>
@@ -141,54 +145,54 @@ if (isset($_GET['success'])) {
         }
         .action-updated {
             background: rgba(100, 116, 139, 0.08);
-            color: #475569;
+            color: var(--status-neutral-text);
             border-color: rgba(100, 116, 139, 0.4);
         }
         .action-archived {
             background: rgba(217, 119, 6, 0.08);
-            color: #b45309;
+            color: var(--status-warning-text);
             border-color: rgba(217, 119, 6, 0.4);
         }
         .action-restored {
             background: rgba(8, 145, 178, 0.08);
-            color: #0e7490;
+            color: var(--status-cyan-text);
             border-color: rgba(8, 145, 178, 0.4);
         }
         .action-approved {
             background: rgba(22, 101, 52, 0.08);
-            color: #166534;
+            color: var(--brand);
             border-color: rgba(22, 101, 52, 0.4);
         }
         .action-rejected {
             background: rgba(220, 38, 38, 0.08);
-            color: #b91c1c;
+            color: var(--status-danger-text);
             border-color: rgba(220, 38, 38, 0.4);
         }
         .action-forwarded {
             background: rgba(8, 145, 178, 0.08);
-            color: #0e7490;
+            color: var(--status-cyan-text);
             border-color: rgba(8, 145, 178, 0.4);
         }
         .action-disseminated {
             background: rgba(29, 78, 216, 0.08);
-            color: #1d4ed8;
+            color: var(--status-info-text);
             border-color: rgba(29, 78, 216, 0.4);
         }
         .action-submitted {
             background: rgba(100, 116, 139, 0.08);
-            color: #475569;
+            color: var(--status-neutral-text);
             border-color: rgba(100, 116, 139, 0.4);
         }
         .action-completed {
             background: rgba(13, 148, 136, 0.08);
-            color: #0f766e;
+            color: var(--status-teal-text);
             border-color: rgba(13, 148, 136, 0.4);
         }
         .log-notes {
             display: block;
             margin-top: 4px;
             font-size: 11px;
-            color: #64748b;
+            color: var(--text-muted);
             font-style: italic;
             max-width: 260px;
             white-space: normal;
@@ -204,11 +208,11 @@ if (isset($_GET['success'])) {
             font-size: 11px;
             font-weight: 700;
             font-style: normal;
-            color: #064e3b;
+            color: var(--brand);
             text-decoration: underline;
             cursor: pointer;
         }
-        .log-notes-view-btn:hover { color: #022c22; }
+        .log-notes-view-btn:hover { color: var(--brand-hover); }
 
         /* Toast notification (parehong pattern gaya ng ibang pahina) */
         @keyframes toastSlideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -248,11 +252,11 @@ if (isset($_GET['success'])) {
                     <!-- SEARCH & FILTER FORM -->
                     <form method="GET" action="tracking.php" class="table-toolbar" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                         <div class="left-controls" style="display: flex; gap: 10px; align-items: center;">
-                            <div class="search-box" style="display: flex; align-items: center; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px;">
-                                <i data-lucide="search" style="width: 14px; color: #64748b; margin-right: 6px;"></i>
+                            <div class="search-box" style="display: flex; align-items: center; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; padding: 4px 8px;">
+                                <i data-lucide="search" style="width: 14px; color: var(--text-muted); margin-right: 6px;"></i>
                                 <input type="text" name="search" value="<?php echo htmlspecialchars($search); ?>" placeholder="Search by control #, office, handler..." style="border: none; outline: none; font-size: 13px;">
                             </div>
-                            <select name="action" class="filter-select" onchange="this.form.submit()" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: #fff;">
+                            <select name="action" class="filter-select" onchange="this.form.submit()" style="padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 6px; font-size: 13px; background: var(--surface);">
                                 <option value="">All Actions</option>
                                 <option value="Submitted" <?php echo ($action_filter === 'Submitted') ? 'selected' : ''; ?>>Submitted</option>
                                 <option value="Received" <?php echo ($action_filter === 'Received') ? 'selected' : ''; ?>>Received</option>
@@ -267,7 +271,7 @@ if (isset($_GET['success'])) {
                                 <option value="Completed" <?php echo ($action_filter === 'Completed') ? 'selected' : ''; ?>>Completed</option>
                             </select>
                             <?php if (!empty($search) || !empty($action_filter)): ?>
-                                <a href="tracking.php" style="font-size: 12px; color: #166534; text-decoration: underline; font-weight: 600;">Reset</a>
+                                <a href="tracking.php" style="font-size: 12px; color: var(--brand); text-decoration: underline; font-weight: 600;">Reset</a>
                             <?php endif; ?>
                         </div>
                         <button type="button" class="secondary-btn" onclick="window.print()"><i data-lucide="printer"></i> Print Trail</button>
@@ -293,7 +297,7 @@ if (isset($_GET['success'])) {
                                         <td>
                                             <div class="route-path" style="display: flex; align-items: center; gap: 6px;">
                                                 <span><?php echo htmlspecialchars($row['routing_from']); ?></span>
-                                                <i data-lucide="arrow-right" style="width: 14px; color: #64748b;"></i>
+                                                <i data-lucide="arrow-right" style="width: 14px; color: var(--text-muted);"></i>
                                                 <span><?php echo htmlspecialchars($row['routing_to']); ?></span>
                                             </div>
                                         </td>
@@ -334,12 +338,12 @@ if (isset($_GET['success'])) {
                                             <?php endif; ?>
                                         </td>
                                         <td><?php echo htmlspecialchars($row['processed_by']); ?></td>
-                                        <td><?php echo date('M d, Y', strtotime($row['timestamp'])); ?> <span class="time-badge" style="color: #64748b; font-size: 12px;"><?php echo date('h:i A', strtotime($row['timestamp'])); ?></span></td>
+                                        <td><?php echo date('M d, Y', strtotime($row['timestamp'])); ?> <span class="time-badge" style="color: var(--text-muted); font-size: 12px;"><?php echo date('h:i A', strtotime($row['timestamp'])); ?></span></td>
                                     </tr>
                                 <?php endwhile; ?>
                             <?php else: ?>
                                 <tr>
-                                    <td colspan="6" style="text-align: center; padding: 20px; color: #64748b;">No tracking logs found.</td>
+                                    <td colspan="6" style="text-align: center; padding: 20px; color: var(--text-muted);">No tracking logs found.</td>
                                 </tr>
                             <?php endif; ?>
                         </tbody>
@@ -347,23 +351,23 @@ if (isset($_GET['success'])) {
 
                     <!-- PAGINATION CONTROLS -->
                     <?php if ($total_pages > 1): ?>
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-top: 1px solid #e2e8f0; font-size: 13px; color: #475569;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-top: 1px solid var(--border); font-size: 13px; color: var(--status-neutral-text);">
                             <div>
                                 Showing page <strong><?php echo $page; ?></strong> of <strong><?php echo $total_pages; ?></strong> (Total: <?php echo $total_records; ?> logs)
                             </div>
                             <div style="display: flex; gap: 6px;">
                                 <!-- Previous Button -->
                                 <?php if ($page > 1): ?>
-                                    <a href="tracking.php?page=<?php echo ($page - 1); ?>&search=<?php echo urlencode($search); ?>&action=<?php echo urlencode($action_filter); ?>" style="padding: 6px 12px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; color: #1e293b; font-weight: 600;">Previous</a>
+                                    <a href="tracking.php?page=<?php echo ($page - 1); ?>&search=<?php echo urlencode($search); ?>&action=<?php echo urlencode($action_filter); ?>" style="padding: 6px 12px; background: var(--surface-hover); border: 1px solid var(--border-strong); border-radius: 6px; text-decoration: none; color: var(--text-heading); font-weight: 600;">Previous</a>
                                 <?php else: ?>
-                                    <span style="padding: 6px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; color: #94a3b8; cursor: not-allowed;">Previous</span>
+                                    <span style="padding: 6px 12px; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 6px; color: var(--text-faint); cursor: not-allowed;">Previous</span>
                                 <?php endif; ?>
 
                                 <!-- Next Button -->
                                 <?php if ($page < $total_pages): ?>
-                                    <a href="tracking.php?page=<?php echo ($page + 1); ?>&search=<?php echo urlencode($search); ?>&action=<?php echo urlencode($action_filter); ?>" style="padding: 6px 12px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; color: #1e293b; font-weight: 600;">Next</a>
+                                    <a href="tracking.php?page=<?php echo ($page + 1); ?>&search=<?php echo urlencode($search); ?>&action=<?php echo urlencode($action_filter); ?>" style="padding: 6px 12px; background: var(--surface-hover); border: 1px solid var(--border-strong); border-radius: 6px; text-decoration: none; color: var(--text-heading); font-weight: 600;">Next</a>
                                 <?php else: ?>
-                                    <span style="padding: 6px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; color: #94a3b8; cursor: not-allowed;">Next</span>
+                                    <span style="padding: 6px 12px; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 6px; color: var(--text-faint); cursor: not-allowed;">Next</span>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -490,7 +494,7 @@ if (isset($_GET['success'])) {
                 </div>
                 <div class="modal-section">
                     <span class="modal-section-title">Full Note</span>
-                    <p id="note_full_text" style="margin: 0; font-size: 13px; color: #334155; white-space: pre-line; font-style: italic;"></p>
+                    <p id="note_full_text" style="margin: 0; font-size: 13px; color: var(--text-secondary); white-space: pre-line; font-style: italic;"></p>
                 </div>
             </div>
             <div class="modal-footer">
@@ -500,8 +504,8 @@ if (isset($_GET['success'])) {
     </div>
 
     <!-- Toast Notification Container -->
-    <div id="toastNotification" style="position: fixed; bottom: 20px; right: 20px; background: #064e3b; color: #ffffff; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: none; align-items: center; gap: 10px; z-index: 1100; font-size: 13px; font-weight: 500;">
-        <i data-lucide="check-circle" id="toastIcon" style="width: 16px; color: #34d399;"></i>
+    <div id="toastNotification" style="position: fixed; bottom: 20px; right: 20px; background: var(--brand-solid); color: var(--white); padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px var(--shadow-medium); display: none; align-items: center; gap: 10px; z-index: 1100; font-size: 13px; font-weight: 500;">
+        <i data-lucide="check-circle" id="toastIcon" style="width: 16px; color: var(--toast-success-icon);"></i>
         <span id="toastMessage">Action completed.</span>
     </div>
 
@@ -516,13 +520,13 @@ if (isset($_GET['success'])) {
             document.getElementById('toastMessage').innerText = message;
 
             if (type === 'error') {
-                toast.style.background = '#7f1d1d';
+                toast.style.background = 'var(--toast-danger-bg)';
                 toastIcon.setAttribute('data-lucide', 'x-circle');
-                toastIcon.style.color = '#fca5a5';
+                toastIcon.style.color = 'var(--toast-danger-icon)';
             } else {
-                toast.style.background = '#064e3b';
+                toast.style.background = 'var(--brand-solid)';
                 toastIcon.setAttribute('data-lucide', 'check-circle');
-                toastIcon.style.color = '#34d399';
+                toastIcon.style.color = 'var(--toast-success-icon)';
             }
 
             toast.classList.remove('toast-hide');
@@ -620,7 +624,7 @@ if (isset($_GET['success'])) {
 
             window.validateDocPicker = function () {
                 if (!valueInput.value) {
-                    searchInput.style.borderColor = '#dc2626';
+                    searchInput.style.borderColor = 'var(--status-danger-solid)';
                     searchInput.focus();
                     return false;
                 }

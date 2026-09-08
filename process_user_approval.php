@@ -4,7 +4,7 @@ include 'db_conn.php';
 include 'log_activity.php'; // I-include ang audit logger
 include 'csrf.php';
 
-// Auth check + admin-only role check (kaparehong pattern ng process_approval.php)
+// Auth check + admin-only role check
 if (!isset($_SESSION['user_id']) || strtolower(trim($_SESSION['user_type'] ?? '')) !== 'admin') {
     header("Location: dashboard.php");
     exit();

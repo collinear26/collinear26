@@ -97,6 +97,10 @@ if ($is_master) {
         if (localStorage.getItem('sidebar-collapsed') === 'true') {
             document.documentElement.classList.add('sidebar-is-collapsed');
         }
+        var savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark' || savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
     </script>
     <style>
         /* Clickable Stat Cards */
@@ -106,7 +110,7 @@ if ($is_master) {
         }
         .stat-card:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+            box-shadow: 0 12px 28px var(--shadow-medium);
         }
 
         /* Clickable Table Rows: buong row ay pwede nang i-click para makita ang document details */
@@ -115,7 +119,7 @@ if ($is_master) {
             transition: background-color 0.15s ease;
         }
         #recordsTable tbody tr.clickable-doc-row:hover {
-            background-color: #f8fafc;
+            background-color: var(--surface-alt);
         }
     </style>
 </head>
@@ -164,32 +168,32 @@ if ($is_master) {
                             <div class="stat-info"><h3><?php echo number_format($total_docs); ?></h3><p>Total Documents (ASCOT-wide)</p></div>
                         </div>
                         <div class="card stat-card" onclick="filterRecords('incoming')">
-                            <div class="stat-icon" style="background: rgba(14, 165, 233, 0.15); color: #0284c7;"><i data-lucide="inbox"></i></div>
+                            <div class="stat-icon" style="background: rgba(14, 165, 233, 0.15); color: var(--status-blue-text);"><i data-lucide="inbox"></i></div>
                             <div class="stat-info"><h3><?php echo number_format($incoming_count); ?></h3><p>Incoming Documents</p></div>
                         </div>
                         <div class="card stat-card" onclick="filterRecords('outgoing')">
-                            <div class="stat-icon" style="background: rgba(29, 78, 216, 0.15); color: #1d4ed8;"><i data-lucide="send"></i></div>
+                            <div class="stat-icon" style="background: rgba(29, 78, 216, 0.15); color: var(--status-info-text);"><i data-lucide="send"></i></div>
                             <div class="stat-info"><h3><?php echo number_format($outgoing_count); ?></h3><p>Outgoing Documents</p></div>
                         </div>
                         <div class="card stat-card" onclick="filterRecords('pending-approval')">
-                            <div class="stat-icon" style="background: rgba(245, 158, 11, 0.15); color: #d97706;"><i data-lucide="clock"></i></div>
-                            <div class="stat-info"><h3><?php echo number_format($pending_count); ?></h3><p>Pending Approval</p></div>
+                            <div class="stat-icon" style="background: rgba(245, 158, 11, 0.15); color: var(--status-warning-text);"><i data-lucide="clock"></i></div>
+                            <div class="stat-info"><h3><?php echo number_format($pending_count); ?></h3><p>Awaiting Stamp</p></div>
                         </div>
                         <div class="card stat-card" onclick="filterRecords('Completed')">
-                            <div class="stat-icon" style="background: rgba(13, 148, 136, 0.15); color: #0f766e;"><i data-lucide="check-check"></i></div>
+                            <div class="stat-icon" style="background: rgba(13, 148, 136, 0.15); color: var(--status-teal-text);"><i data-lucide="check-check"></i></div>
                             <div class="stat-info"><h3><?php echo number_format($completed_count); ?></h3><p>Completed</p></div>
                         </div>
                         <div class="card stat-card" onclick="filterRecords('confidential')">
-                            <div class="stat-icon" style="background: rgba(153, 27, 27, 0.12); color: #991b1b;"><i data-lucide="lock"></i></div>
+                            <div class="stat-icon" style="background: rgba(153, 27, 27, 0.12); color: var(--status-danger-text);"><i data-lucide="lock"></i></div>
                             <div class="stat-info"><h3><?php echo number_format($confidential_count); ?></h3><p>Confidential Documents</p></div>
                         </div>
                         <div class="card stat-card" onclick="filterRecords('Overdue')">
-                            <div class="stat-icon" style="background: rgba(239, 68, 68, 0.15); color: #dc2626;"><i data-lucide="alert-circle"></i></div>
+                            <div class="stat-icon" style="background: rgba(239, 68, 68, 0.15); color: var(--status-danger-solid);"><i data-lucide="alert-circle"></i></div>
                             <div class="stat-info"><h3><?php echo number_format($overdue_count); ?></h3><p>Overdue Tasks</p></div>
                         </div>
                         <?php if ($user_type === 'admin'): ?>
                             <div class="card stat-card" onclick="filterRecords('users')">
-                                <div class="stat-icon" style="background: rgba(59, 130, 246, 0.15); color: #2563eb;"><i data-lucide="users"></i></div>
+                                <div class="stat-icon" style="background: rgba(59, 130, 246, 0.15); color: var(--status-info-text);"><i data-lucide="users"></i></div>
                                 <div class="stat-info"><h3><?php echo number_format($active_users); ?></h3><p>Active Users</p></div>
                             </div>
                         <?php endif; ?>
@@ -199,15 +203,15 @@ if ($is_master) {
                             <div class="stat-info"><h3><?php echo number_format($my_submissions_count); ?></h3><p>My Submissions</p></div>
                         </div>
                         <div class="card stat-card" onclick="filterRecords('pending-approval')">
-                            <div class="stat-icon" style="background: rgba(245, 158, 11, 0.15); color: #d97706;"><i data-lucide="inbox"></i></div>
+                            <div class="stat-icon" style="background: rgba(245, 158, 11, 0.15); color: var(--status-warning-text);"><i data-lucide="inbox"></i></div>
                             <div class="stat-info"><h3><?php echo number_format($pending_count); ?></h3><p>Pending for My Office</p></div>
                         </div>
                         <div class="card stat-card" onclick="filterRecords('Completed')">
-                            <div class="stat-icon" style="background: rgba(13, 148, 136, 0.15); color: #0f766e;"><i data-lucide="check-check"></i></div>
+                            <div class="stat-icon" style="background: rgba(13, 148, 136, 0.15); color: var(--status-teal-text);"><i data-lucide="check-check"></i></div>
                             <div class="stat-info"><h3><?php echo number_format($completed_count); ?></h3><p>Completed</p></div>
                         </div>
                         <div class="card stat-card" onclick="filterRecords('Overdue')">
-                            <div class="stat-icon" style="background: rgba(239, 68, 68, 0.15); color: #dc2626;"><i data-lucide="alert-circle"></i></div>
+                            <div class="stat-icon" style="background: rgba(239, 68, 68, 0.15); color: var(--status-danger-solid);"><i data-lucide="alert-circle"></i></div>
                             <div class="stat-info"><h3><?php echo number_format($overdue_count); ?></h3><p>Overdue Tasks</p></div>
                         </div>
                     <?php endif; ?>
@@ -230,7 +234,7 @@ if ($is_master) {
                                     </tr>
                                 <?php endwhile; ?>
                             <?php else: ?>
-                                <tr><td colspan="4" style="text-align:center; color:#64748b; padding:16px;">No documents yet.</td></tr>
+                                <tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:16px;">No documents yet.</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
@@ -243,7 +247,7 @@ if ($is_master) {
                         <div class="card-title">
                             <i data-lucide="history" style="width: 16px;"></i> <?php echo $is_master ? 'Recent Document Activities (ASCOT-wide)' : 'My Recent Activity (Submissions &amp; ' . htmlspecialchars($my_department ?: 'Office') . ' Queue)'; ?>
                         </div>
-                        <button type="button" id="resetFilterBtn" onclick="filterRecords('all')" style="display:none; background:none; border:none; color:#166534; font-size:12px; font-weight:700; cursor:pointer; text-decoration:underline;">Show All</button>
+                        <button type="button" id="resetFilterBtn" onclick="filterRecords('all')" style="display:none; background:none; border:none; color:var(--brand); font-size:12px; font-weight:700; cursor:pointer; text-decoration:underline;">Show All</button>
                     </div>
 
                     <!-- DATA TABLE -->
@@ -280,7 +284,7 @@ if ($is_master) {
                                         <td>
                                             <strong><?php echo htmlspecialchars($tracking_no); ?></strong>
                                             <?php if (!empty($doc['is_confidential'])): ?>
-                                                <span style="display: inline-block; background: #fee2e2; color: #991b1b; font-size: 9px; padding: 1px 5px; border-radius: 4px; font-weight: 700; margin-left: 4px;">CONFIDENTIAL</span>
+                                                <span style="display: inline-block; background: var(--danger-soft-hover); color: var(--status-danger-text); font-size: 9px; padding: 1px 5px; border-radius: 4px; font-weight: 700; margin-left: 4px;">CONFIDENTIAL</span>
                                             <?php endif; ?>
                                         </td>
                                         <td>
@@ -298,9 +302,9 @@ if ($is_master) {
                                                 <?php echo htmlspecialchars($doc['sender'] ?? 'Office'); ?>
                                             <?php else: ?>
                                                 <?php if (intval($doc['created_by'] ?? 0) === intval($_SESSION['user_id'])): ?>
-                                                    <span style="color:#166534; font-weight:700; font-size:11.5px;">Submitted by You</span>
+                                                    <span style="color:var(--brand); font-weight:700; font-size:11.5px;">Submitted by You</span>
                                                 <?php else: ?>
-                                                    <span style="color:#1d4ed8; font-weight:700; font-size:11.5px;">Routed to Your Office</span>
+                                                    <span style="color:var(--status-info-text); font-weight:700; font-size:11.5px;">Routed to Your Office</span>
                                                 <?php endif; ?>
                                             <?php endif; ?>
                                         </td>
@@ -335,7 +339,7 @@ if ($is_master) {
                                 <?php endwhile; ?>
                             <?php else: ?>
                                 <tr>
-                                    <td colspan="7" style="text-align: center; padding: 20px; color: #64748b;">No documents found in the database.</td>
+                                    <td colspan="7" style="text-align: center; padding: 20px; color: var(--text-muted);">No documents found in the database.</td>
                                 </tr>
                             <?php endif; ?>
                         </tbody>
@@ -353,7 +357,7 @@ if ($is_master) {
         <div class="modal-panel modal-panel--lg">
             <div class="modal-header">
                 <div class="modal-header-text">
-                    <span class="modal-subtitle" style="text-transform: uppercase; font-weight: 700; color: #166534; letter-spacing: .04em;">Aurora State College of Technology</span>
+                    <span class="modal-subtitle" style="text-transform: uppercase; font-weight: 700; color: var(--brand); letter-spacing: .04em;">Aurora State College of Technology</span>
                     <h3>Official Document Record <strong id="view_tracking" class="modal-badge"></strong></h3>
                 </div>
                 <button type="button" onclick="closeViewModal()" class="modal-close">&times;</button>
@@ -362,10 +366,10 @@ if ($is_master) {
 
             <div class="modal-section">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
-                    <p id="view_title" style="margin: 0; font-size: 19px; font-weight: 700; color: #0f172a;"></p>
+                    <p id="view_title" style="margin: 0; font-size: 19px; font-weight: 700; color: var(--text-primary);"></p>
                     <span id="view_status_badge" style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; flex-shrink: 0;"></span>
                 </div>
-                <p style="margin: 4px 0 0 0; font-size: 12.5px; color: #64748b;" id="view_category"></p>
+                <p style="margin: 4px 0 0 0; font-size: 12.5px; color: var(--text-muted);" id="view_category"></p>
             </div>
 
             <div class="modal-info-grid">
@@ -376,7 +380,7 @@ if ($is_master) {
             </div>
 
             <div class="modal-section" style="flex-direction: row; justify-content: space-between; align-items: center;">
-                <div style="font-size: 13px; color: #475569;">
+                <div style="font-size: 13px; color: var(--status-neutral-text);">
                     <i data-lucide="file-text" style="width: 14px; vertical-align: middle; margin-right: 4px;"></i>
                     <span>Attached Document File</span>
                 </div>
@@ -391,8 +395,8 @@ if ($is_master) {
     </div>
 
     <!-- Professional Toast Notification Container -->
-    <div id="toastNotification" style="position: fixed; bottom: 20px; right: 20px; background: #064e3b; color: #ffffff; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: none; align-items: center; gap: 10px; z-index: 1100; font-size: 13px; font-weight: 500;">
-        <i data-lucide="check-circle" style="width: 16px; color: #34d399;"></i>
+    <div id="toastNotification" style="position: fixed; bottom: 20px; right: 20px; background: var(--brand-solid); color: var(--white); padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px var(--shadow-medium); display: none; align-items: center; gap: 10px; z-index: 1100; font-size: 13px; font-weight: 500;">
+        <i data-lucide="check-circle" style="width: 16px; color: var(--toast-success-icon);"></i>
         <span id="toastMessage">Download started successfully.</span>
     </div>
 
@@ -415,7 +419,7 @@ if ($is_master) {
             'all': 'All Records',
             'incoming': 'Incoming Documents',
             'outgoing': 'Outgoing Documents',
-            'pending-approval': 'Pending Approval',
+            'pending-approval': 'Awaiting Stamp',
             'confidential': 'Confidential Documents',
             'mine': 'My Submissions',
             'Completed': 'Completed',
@@ -477,11 +481,11 @@ if ($is_master) {
             statusBadge.innerText = status;
             let lowerStatus = status.toLowerCase();
             if(lowerStatus === 'received') {
-                statusBadge.style.background = '#dcfce7'; statusBadge.style.color = '#166534';
+                statusBadge.style.background = 'var(--success-soft-bg)'; statusBadge.style.color = 'var(--brand)';
             } else if(lowerStatus === 'pending') {
-                statusBadge.style.background = '#fef9c3'; statusBadge.style.color = '#854d0e';
+                statusBadge.style.background = 'var(--warning-soft-bg)'; statusBadge.style.color = 'var(--status-warning-text)';
             } else {
-                statusBadge.style.background = '#fee2e2'; statusBadge.style.color = '#991b1b';
+                statusBadge.style.background = 'var(--danger-soft-hover)'; statusBadge.style.color = 'var(--status-danger-text)';
             }
 
             document.getElementById('view_download_link').href = "download_doc.php?id=" + id;

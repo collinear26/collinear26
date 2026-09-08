@@ -118,39 +118,43 @@ if ($all_users_result) {
         if (localStorage.getItem('sidebar-collapsed') === 'true') {
             document.documentElement.classList.add('sidebar-is-collapsed');
         }
+        var savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark' || savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
     </script>
 
     <style>
         .content { padding: 12px 36px 36px 36px; flex: 1; overflow: hidden; }
-        .chat-container { height: 100%; background: rgba(255, 255, 255, 0.75); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.85); border-radius: 16px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); display: flex; overflow: hidden; }
+        .chat-container { height: 100%; background: rgba(255, 255, 255, 0.75); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid var(--surface-translucent); border-radius: 16px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); display: flex; overflow: hidden; }
         
-        .chat-sidebar { width: 320px; border-right: 1px solid rgba(6, 78, 59, 0.15); display: flex; flex-direction: column; background: rgba(255, 255, 255, 0.4); }
-        .chat-search { padding: 16px; border-bottom: 1px solid rgba(6, 78, 59, 0.1); display: flex; gap: 8px; align-items: center; }
-        .search-input-box { display: flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.85); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(6, 78, 59, 0.2); flex: 1; }
+        .chat-sidebar { width: 320px; border-right: 1px solid var(--brand-soft-15); display: flex; flex-direction: column; background: rgba(255, 255, 255, 0.4); }
+        .chat-search { padding: 16px; border-bottom: 1px solid var(--brand-soft-10); display: flex; gap: 8px; align-items: center; }
+        .search-input-box { display: flex; align-items: center; gap: 8px; background: var(--surface-translucent); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--brand-soft-20); flex: 1; }
         .search-input-box input { border: none; background: transparent; outline: none; font-size: 12px; width: 100%; font-weight: 600; }
-        .new-conv-btn { background: #064e3b; color: #fff; border: none; width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: 0.2s; }
-        .new-conv-btn:hover { background: #022c22; }
+        .new-conv-btn { background: var(--brand-solid); color: var(--white); border: none; width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: 0.2s; }
+        .new-conv-btn:hover { background: var(--brand-hover); }
         .conv-list { flex: 1; overflow-y: auto; }
-        .conv-item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid rgba(6, 78, 59, 0.08); cursor: pointer; transition: all 0.2s ease; text-decoration: none; color: inherit; }
-        .conv-item:hover { background: rgba(6, 78, 59, 0.08); }
-        .conv-item.active { background: rgba(6, 78, 59, 0.15); border-left: 4px solid #064e3b; }
-        .conv-avatar { width: 40px; height: 40px; border-radius: 10px; color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 14px; position: relative; flex-shrink: 0; }
+        .conv-item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--brand-soft-08); cursor: pointer; transition: all 0.2s ease; text-decoration: none; color: inherit; }
+        .conv-item:hover { background: var(--brand-soft-08); }
+        .conv-item.active { background: var(--brand-soft-15); border-left: 4px solid var(--brand); }
+        .conv-avatar { width: 40px; height: 40px; border-radius: 10px; color: var(--white); font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 14px; position: relative; flex-shrink: 0; }
         .conv-details { flex: 1; min-width: 0; }
         .conv-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-        .conv-name { font-size: 13px; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .conv-time { font-size: 10px; color: #64748b; font-weight: 600; }
-        .conv-msg { font-size: 11.5px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
-        .empty-conv-list { padding: 30px 20px; text-align: center; color: #64748b; font-size: 12px; }
+        .conv-name { font-size: 13px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .conv-time { font-size: 10px; color: var(--text-muted); font-weight: 600; }
+        .conv-msg { font-size: 11.5px; color: var(--status-neutral-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+        .empty-conv-list { padding: 30px 20px; text-align: center; color: var(--text-muted); font-size: 12px; }
 
         /* UNREAD CONVERSATION STYLING: naka-bold ang pangalan at preview
            habang may unread pa, para malaman agad kung sino ang may bagong
            mensahe nang hindi na kailangang buksan muna ang bawat isa */
-        .conv-item.has-unread .conv-name { font-weight: 800; color: #064e3b; }
-        .conv-item.has-unread .conv-msg { font-weight: 700; color: #0f172a; }
-        .conv-item.has-unread .conv-time { color: #064e3b; font-weight: 800; }
+        .conv-item.has-unread .conv-name { font-weight: 800; color: var(--brand); }
+        .conv-item.has-unread .conv-msg { font-weight: 700; color: var(--text-primary); }
+        .conv-item.has-unread .conv-time { color: var(--brand); font-weight: 800; }
         .conv-unread-dot {
-            background: #064e3b;
-            color: #fff;
+            background: var(--brand-solid);
+            color: var(--white);
             font-size: 10px;
             font-weight: 800;
             min-width: 18px;
@@ -164,17 +168,17 @@ if ($all_users_result) {
         }
 
         .chat-main { flex: 1; display: flex; flex-direction: column; background: rgba(255, 255, 255, 0.2); position: relative; }
-        .chat-header { padding: 14px 20px; border-bottom: 1px solid rgba(6, 78, 59, 0.15); background: rgba(255, 255, 255, 0.6); display: flex; align-items: center; justify-content: space-between; position: relative; }
+        .chat-header { padding: 14px 20px; border-bottom: 1px solid var(--brand-soft-15); background: var(--surface-translucent); display: flex; align-items: center; justify-content: space-between; position: relative; }
         .active-user { display: flex; align-items: center; gap: 10px; }
-        .active-title h3 { font-size: 14px; font-weight: 800; color: #0f172a; margin: 0; }
-        .active-title p { font-size: 11px; color: #064e3b; font-weight: 600; margin: 0; }
+        .active-title h3 { font-size: 14px; font-weight: 800; color: var(--text-primary); margin: 0; }
+        .active-title p { font-size: 11px; color: var(--brand); font-weight: 600; margin: 0; }
 
         .chat-messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
         .msg-row { display: flex; align-items: flex-end; gap: 6px; max-width: 75%; }
         .msg-row.mine { align-self: flex-end; flex-direction: row-reverse; }
         .msg-bubble { max-width: 100%; padding: 10px 14px; border-radius: 14px; font-size: 12.5px; font-weight: 600; line-height: 1.4; position: relative; }
-        .msg-incoming { background: rgba(255, 255, 255, 0.9); color: #1e293b; border-bottom-left-radius: 2px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-        .msg-outgoing { background: #064e3b; color: #ffffff; border-bottom-right-radius: 2px; box-shadow: 0 2px 10px rgba(6, 78, 59, 0.3); }
+        .msg-incoming { background: var(--surface-translucent); color: var(--text-heading); border-bottom-left-radius: 2px; box-shadow: 0 2px 8px var(--shadow-soft); }
+        .msg-outgoing { background: var(--brand-solid); color: var(--white); border-bottom-right-radius: 2px; box-shadow: 0 2px 10px rgba(6, 78, 59, 0.3); }
         .msg-time { font-size: 9.5px; margin-top: 4px; display: block; text-align: right; opacity: 0.75; }
         .msg-edited-tag { font-size: 9px; opacity: 0.65; font-style: italic; margin-left: 4px; }
         .msg-deleted { font-style: italic; opacity: 0.65; }
@@ -187,24 +191,24 @@ if ($all_users_result) {
         /* Hover actions (Edit/Unsend) — lumalabas lang sa sariling messages */
         .msg-actions { display: none; flex-direction: column; gap: 2px; }
         .msg-row.mine:hover .msg-actions { display: flex; }
-        .msg-action-btn { background: rgba(0,0,0,0.06); border: none; width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #475569; }
-        .msg-action-btn:hover { background: rgba(0,0,0,0.12); color: #064e3b; }
+        .msg-action-btn { background: rgba(0,0,0,0.06); border: none; width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--status-neutral-text); }
+        .msg-action-btn:hover { background: var(--shadow-medium); color: var(--brand); }
 
         /* Delete Conversation button sa header */
         .chat-header-actions { display: flex; gap: 6px; }
-        .chat-header-btn { background: none; border: none; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #64748b; }
-        .chat-header-btn:hover { background: rgba(220, 38, 38, 0.1); color: #dc2626; }
+        .chat-header-btn { background: none; border: none; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted); }
+        .chat-header-btn:hover { background: rgba(220, 38, 38, 0.1); color: var(--status-danger-solid); }
 
         /* File attach button sa input area */
-        .attach-btn { background: rgba(6, 78, 59, 0.08); border: none; width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #064e3b; flex-shrink: 0; }
-        .attach-btn:hover { background: rgba(6, 78, 59, 0.15); }
-        .attach-preview { display: flex; align-items: center; gap: 6px; background: rgba(6, 78, 59, 0.08); padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; color: #064e3b; }
-        .attach-preview button { background: none; border: none; cursor: pointer; color: #dc2626; font-weight: 800; }
+        .attach-btn { background: var(--brand-soft-08); border: none; width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--brand); flex-shrink: 0; }
+        .attach-btn:hover { background: var(--brand-soft-15); }
+        .attach-preview { display: flex; align-items: center; gap: 6px; background: var(--brand-soft-08); padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; color: var(--brand); }
+        .attach-preview button { background: none; border: none; cursor: pointer; color: var(--status-danger-solid); font-weight: 800; }
 
-        .chat-input-area { padding: 14px 20px; background: rgba(255, 255, 255, 0.7); border-top: 1px solid rgba(6, 78, 59, 0.15); display: flex; align-items: center; gap: 10px; }
-        .chat-input-area input { flex: 1; background: #ffffff; border: 1px solid rgba(6, 78, 59, 0.25); padding: 10px 14px; border-radius: 10px; font-size: 12.5px; font-weight: 600; outline: none; }
-        .send-btn { background: #064e3b; color: #ffffff; border: none; padding: 10px 16px; border-radius: 10px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(6, 78, 59, 0.3); }
-        .send-btn:hover { background: #022c22; }
+        .chat-input-area { padding: 14px 20px; background: rgba(255, 255, 255, 0.7); border-top: 1px solid var(--brand-soft-15); display: flex; align-items: center; gap: 10px; }
+        .chat-input-area input { flex: 1; background: var(--surface); border: 1px solid var(--brand-soft-25); padding: 10px 14px; border-radius: 10px; font-size: 12.5px; font-weight: 600; outline: none; }
+        .send-btn { background: var(--brand-solid); color: var(--white); border: none; padding: 10px 16px; border-radius: 10px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(6, 78, 59, 0.3); }
+        .send-btn:hover { background: var(--brand-hover); }
         .send-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
         /* CONTACT PROFILE PANEL (ikatlong column) — simpleng buod ng
@@ -214,7 +218,7 @@ if ($all_users_result) {
         .chat-profile-panel {
             width: 260px;
             flex-shrink: 0;
-            border-left: 1px solid rgba(6, 78, 59, 0.15);
+            border-left: 1px solid var(--brand-soft-15);
             background: rgba(255, 255, 255, 0.5);
             overflow-y: auto;
             padding: 28px 20px;
@@ -227,7 +231,7 @@ if ($all_users_result) {
             width: 72px;
             height: 72px;
             border-radius: 18px;
-            color: #fff;
+            color: var(--white);
             font-weight: 800;
             font-size: 24px;
             display: flex;
@@ -235,14 +239,14 @@ if ($all_users_result) {
             justify-content: center;
             margin-bottom: 14px;
         }
-        .profile-panel-name { font-size: 15px; font-weight: 800; color: #0f172a; margin: 0; }
+        .profile-panel-name { font-size: 15px; font-weight: 800; color: var(--text-primary); margin: 0; }
         .profile-panel-role {
             display: inline-block;
             margin-top: 6px;
             padding: 3px 10px;
             border-radius: 999px;
-            background: rgba(6, 78, 59, 0.1);
-            color: #064e3b;
+            background: var(--brand-soft-10);
+            color: var(--brand);
             font-size: 10.5px;
             font-weight: 800;
             text-transform: uppercase;
@@ -252,22 +256,22 @@ if ($all_users_result) {
             width: 100%;
             margin-top: 24px;
             padding-top: 18px;
-            border-top: 1px solid rgba(6, 78, 59, 0.1);
+            border-top: 1px solid var(--brand-soft-10);
             text-align: left;
         }
         .profile-panel-section-title {
             font-size: 10.5px;
             font-weight: 800;
-            color: #64748b;
+            color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: .04em;
             margin: 0 0 12px 0;
         }
         .profile-panel-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
         .profile-panel-row:last-child { margin-bottom: 0; }
-        .profile-panel-row i { width: 15px; height: 15px; color: #064e3b; flex-shrink: 0; margin-top: 1px; }
-        .profile-panel-row-label { font-size: 10px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
-        .profile-panel-row-value { font-size: 12.5px; color: #1e293b; font-weight: 600; word-break: break-word; }
+        .profile-panel-row i { width: 15px; height: 15px; color: var(--brand); flex-shrink: 0; margin-top: 1px; }
+        .profile-panel-row-label { font-size: 10px; color: var(--text-faint); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+        .profile-panel-row-value { font-size: 12.5px; color: var(--text-heading); font-weight: 600; word-break: break-word; }
 
         /* Sa maliit na screen, wala nang puwang para sa 3rd column — ang
            conversation list at chat lang ang priority doon (parehong
@@ -280,13 +284,13 @@ if ($all_users_result) {
            sa shared .modal-overlay/.modal-panel/.modal-header sa style.css;
            dito na lang ang mga bagay na specific sa "user picker" layout na
            ito (search box + scrollable list), dahil hindi ito karaniwang form. */
-        .modal-search { padding: 12px 20px; border-bottom: 1px solid rgba(6,78,59,0.08); }
+        .modal-search { padding: 12px 20px; border-bottom: 1px solid var(--brand-soft-08); }
         .modal-user-list { overflow-y: auto; flex: 1; }
         .modal-user-item { display: flex; align-items: center; gap: 10px; padding: 12px 20px; cursor: pointer; text-decoration: none; color: inherit; transition: 0.2s; }
         .modal-user-item:hover { background: rgba(6, 78, 59, 0.06); }
         .modal-user-item .conv-avatar { width: 34px; height: 34px; font-size: 12px; }
-        .modal-user-name { font-size: 13px; font-weight: 700; color: #0f172a; }
-        .modal-user-dept { font-size: 11px; color: #64748b; }
+        .modal-user-name { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+        .modal-user-dept { font-size: 11px; color: var(--text-muted); }
     </style>
 </head>
 <body>
@@ -309,7 +313,7 @@ if ($all_users_result) {
                     <div class="chat-sidebar">
                         <div class="chat-search">
                             <div class="search-input-box">
-                                <i data-lucide="search" style="width: 14px; color: #64748b;"></i>
+                                <i data-lucide="search" style="width: 14px; color: var(--text-muted);"></i>
                                 <input type="text" id="searchInput" placeholder="Search conversations..." onkeyup="filterConversations()">
                             </div>
                             <button type="button" class="new-conv-btn" title="Start new conversation" onclick="openNewConvModal()">
@@ -370,7 +374,7 @@ if ($all_users_result) {
 
                             <div class="chat-messages" id="chatMessages" data-conv-id="<?php echo $active_conv_id; ?>" data-last-id="<?php echo $last_message_id; ?>">
                                 <?php if (empty($messages)): ?>
-                                    <p style="text-align: center; color: #64748b; font-size: 12px; margin-top: 20px;">No messages in this thread yet. Say hi!</p>
+                                    <p style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 20px;">No messages in this thread yet. Say hi!</p>
                                 <?php else: ?>
                                     <?php foreach ($messages as $msg): ?>
                                         <?php 
@@ -424,7 +428,7 @@ if ($all_users_result) {
                                 <button type="submit" id="sendBtn" class="send-btn"><i data-lucide="send" style="width: 14px;"></i> Send</button>
                             </form>
                         <?php else: ?>
-                            <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #64748b; flex-direction: column; gap: 10px;">
+                            <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); flex-direction: column; gap: 10px;">
                                 <i data-lucide="message-square" style="width: 40px; opacity: 0.4;"></i>
                                 <p>Select a conversation, or start a new one</p>
                             </div>
@@ -486,7 +490,7 @@ if ($all_users_result) {
             </div>
             <div class="modal-search">
                 <div class="search-input-box">
-                    <i data-lucide="search" style="width: 14px; color: #64748b;"></i>
+                    <i data-lucide="search" style="width: 14px; color: var(--text-muted);"></i>
                     <input type="text" id="modalSearchInput" placeholder="Search users..." onkeyup="filterModalUsers()">
                 </div>
             </div>
@@ -652,7 +656,7 @@ if ($all_users_result) {
                 confirmButtonText: 'Yes, Delete',
                 cancelButtonText: 'Cancel',
                 reverseButtons: true,
-                confirmButtonColor: '#dc2626'
+                confirmButtonColor: 'var(--status-danger-solid)'
             }).then((result) => {
                 if (!result.isConfirmed) return;
 
@@ -683,7 +687,7 @@ if ($all_users_result) {
                 confirmButtonText: 'Yes, Unsend',
                 cancelButtonText: 'Cancel',
                 reverseButtons: true,
-                confirmButtonColor: '#dc2626'
+                confirmButtonColor: 'var(--status-danger-solid)'
             }).then((result) => {
                 if (!result.isConfirmed) return;
 

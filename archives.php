@@ -2,14 +2,17 @@
 session_start();
 include 'db_conn.php';
 include 'csrf.php';
+include 'document_access.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
 }
 
-// Admin-only: Archives
-if (strtolower(trim($_SESSION['user_type'] ?? '')) !== 'admin') {
+// Admin/Records Unit (master scope): Archives (BUG FIX: dating admin-lang,
+// hindi tugma sa ibang document actions — Receive/Release/Archive/Forward/
+// Complete — na naka-widen na sa is_master_scope_user())
+if (!is_master_scope_user()) {
     header("Location: dashboard.php");
     exit();
 }
@@ -37,6 +40,29 @@ if ($year_filter !== 'all') {
 }
 
 $where_sql = "WHERE " . implode(" AND ", $where_clauses);
+
+// TOAST FEEDBACK (BUG FIX: kaparehong klase ng gap na na-fix na sa
+// documents.php — walang display ang page na ito kahit na-re-redirect na
+// dito ang archive_document.php/restore_document.php na may ?msg=/?error=)
+$toast_message = '';
+$toast_type = 'success';
+if (isset($_GET['msg']) && $_GET['msg'] === 'success') {
+    $toast_message = 'Document restored successfully.';
+} elseif (isset($_GET['error'])) {
+    switch ($_GET['error']) {
+        case 'unauthorized':
+            $toast_message = 'You are not authorized to perform this action.';
+            $toast_type = 'error';
+            break;
+        case 'restorefailed':
+            $toast_message = 'Could not restore this document. Please try again.';
+            $toast_type = 'error';
+            break;
+        default:
+            $toast_message = 'Something went wrong. Please try again.';
+            $toast_type = 'error';
+    }
+}
 
 // Pagination Configuration
 $limit = 10;
@@ -84,8 +110,17 @@ $result = mysqli_stmt_get_result($stmt);
         if (localStorage.getItem('sidebar-collapsed') === 'true') {
             document.documentElement.classList.add('sidebar-is-collapsed');
         }
+        var savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark' || savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
     </script>
-    
+    <style>
+        @keyframes toastSlideIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes toastSlideOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(12px); } }
+        #toastNotification.toast-show { animation: toastSlideIn 0.25s ease-out forwards; }
+        #toastNotification.toast-hide { animation: toastSlideOut 0.2s ease-in forwards; }
+    </style>
 </head>
 <body>
 
@@ -114,19 +149,19 @@ $result = mysqli_stmt_get_result($stmt);
                     <!-- TOOLBAR (Search & Filters) -->
                     <form method="GET" action="archives.php" class="table-toolbar" style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
                         <div class="left-controls" style="display: flex; gap: 10px; align-items: center;">
-                            <div class="search-box" style="display: flex; align-items: center; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px;">
-                                <i data-lucide="search" style="width: 14px; color: #64748b; margin-right: 6px;"></i>
+                            <div class="search-box" style="display: flex; align-items: center; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; padding: 4px 8px;">
+                                <i data-lucide="search" style="width: 14px; color: var(--text-muted); margin-right: 6px;"></i>
                                 <input type="text" name="search" value="<?php echo htmlspecialchars($search); ?>" placeholder="Search archived records..." style="border: none; outline: none; font-size: 13px;">
                             </div>
 
-                            <select name="year" class="filter-select" onchange="this.form.submit()" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: #fff;">
+                            <select name="year" class="filter-select" onchange="this.form.submit()" style="padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 6px; font-size: 13px; background: var(--surface);">
                                 <option value="all" <?php echo ($year_filter === 'all') ? 'selected' : ''; ?>>All Academic Years</option>
                                 <option value="2025" <?php echo ($year_filter === '2025') ? 'selected' : ''; ?>>AY 2025 - 2026</option>
                                 <option value="2024" <?php echo ($year_filter === '2024') ? 'selected' : ''; ?>>AY 2024 - 2025</option>
                             </select>
 
                             <?php if (!empty($search) || $year_filter !== 'all'): ?>
-                                <a href="archives.php" style="font-size: 12px; color: #166534; text-decoration: underline; font-weight: 600;">Reset</a>
+                                <a href="archives.php" style="font-size: 12px; color: var(--brand); text-decoration: underline; font-weight: 600;">Reset</a>
                             <?php endif; ?>
                         </div>
                     </form>
@@ -174,7 +209,7 @@ $result = mysqli_stmt_get_result($stmt);
                                                 <form method="POST" action="restore_document.php" class="inline-approval-form" id="restore-form-<?php echo $row['id']; ?>">
                                                     <?php csrf_field(); ?>
                                                     <input type="hidden" name="id" value="<?php echo $row['id']; ?>">
-                                                    <button type="button" class="action-icon-btn" title="Restore Record" onclick="openRestoreModal('restore-form-<?php echo $row['id']; ?>')" style="color: #166534; background: rgba(22, 101, 52, 0.1); border: 1px solid rgba(22, 101, 52, 0.25); width: auto; padding: 0 10px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700;">
+                                                    <button type="button" class="action-icon-btn" title="Restore Record" onclick="openRestoreModal('restore-form-<?php echo $row['id']; ?>')" style="color: var(--brand); background: rgba(22, 101, 52, 0.1); border: 1px solid rgba(22, 101, 52, 0.25); width: auto; padding: 0 10px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700;">
                                                         <i data-lucide="rotate-ccw" style="width:13px;"></i> Restore
                                                     </button>
                                                 </form>
@@ -187,7 +222,7 @@ $result = mysqli_stmt_get_result($stmt);
                                 <?php endwhile; ?>
                             <?php else: ?>
                                 <tr>
-                                    <td colspan="7" style="text-align: center; padding: 20px; color: #64748b;">No archived records found.</td>
+                                    <td colspan="7" style="text-align: center; padding: 20px; color: var(--text-muted);">No archived records found.</td>
                                 </tr>
                             <?php endif; ?>
                         </tbody>
@@ -206,21 +241,21 @@ $result = mysqli_stmt_get_result($stmt);
 
                             <!-- Previous Button -->
                             <?php if ($page > 1): ?>
-                                <a href="<?php echo $pagination_prefix . ($page - 1); ?>" class="page-btn" style="text-decoration: none; padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; color: #334155; font-size: 13px;">Previous</a>
+                                <a href="<?php echo $pagination_prefix . ($page - 1); ?>" class="page-btn" style="text-decoration: none; padding: 6px 12px; border: 1px solid var(--border-strong); border-radius: 6px; color: var(--text-secondary); font-size: 13px;">Previous</a>
                             <?php else: ?>
-                                <span class="page-btn" style="padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 6px; color: #94a3b8; font-size: 13px; cursor: not-allowed; background: #f8fafc;">Previous</span>
+                                <span class="page-btn" style="padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-faint); font-size: 13px; cursor: not-allowed; background: var(--surface-alt);">Previous</span>
                             <?php endif; ?>
 
                             <!-- Dynamic Page Number Buttons -->
                             <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                                <a href="<?php echo $pagination_prefix . $i; ?>" class="page-btn <?php echo ($page == $i) ? 'active' : ''; ?>" style="text-decoration: none; padding: 6px 12px; border: 1px solid <?php echo ($page == $i) ? '#166534' : '#cbd5e1'; ?>; background: <?php echo ($page == $i) ? '#166534' : '#fff'; ?>; color: <?php echo ($page == $i) ? '#fff' : '#334155'; ?>; border-radius: 6px; font-size: 13px; font-weight: 600;"><?php echo $i; ?></a>
+                                <a href="<?php echo $pagination_prefix . $i; ?>" class="page-btn <?php echo ($page == $i) ? 'active' : ''; ?>" style="text-decoration: none; padding: 6px 12px; border: 1px solid <?php echo ($page == $i) ? 'var(--brand)' : 'var(--border-strong)'; ?>; background: <?php echo ($page == $i) ? 'var(--brand)' : 'var(--surface)'; ?>; color: <?php echo ($page == $i) ? 'var(--surface)' : 'var(--text-secondary)'; ?>; border-radius: 6px; font-size: 13px; font-weight: 600;"><?php echo $i; ?></a>
                             <?php endfor; ?>
 
                             <!-- Next Button -->
                             <?php if ($page < $total_pages): ?>
-                                <a href="<?php echo $pagination_prefix . ($page + 1); ?>" class="page-btn" style="text-decoration: none; padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; color: #334155; font-size: 13px;">Next</a>
+                                <a href="<?php echo $pagination_prefix . ($page + 1); ?>" class="page-btn" style="text-decoration: none; padding: 6px 12px; border: 1px solid var(--border-strong); border-radius: 6px; color: var(--text-secondary); font-size: 13px;">Next</a>
                             <?php else: ?>
-                                <span class="page-btn" style="padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 6px; color: #94a3b8; font-size: 13px; cursor: not-allowed; background: #f8fafc;">Next</span>
+                                <span class="page-btn" style="padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-faint); font-size: 13px; cursor: not-allowed; background: var(--surface-alt);">Next</span>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -236,11 +271,11 @@ $result = mysqli_stmt_get_result($stmt);
     <div id="restoreConfirmModal" class="modal-overlay" style="display: none;">
         <div class="modal-panel modal-panel--sm" style="text-align: center;">
             <div class="modal-body" style="align-items: center;">
-                <div style="width: 48px; height: 48px; background: #f0fdf4; color: #166534; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 6px auto 0 auto;">
+                <div style="width: 48px; height: 48px; background: var(--success-soft-bg); color: var(--brand); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 6px auto 0 auto;">
                     <i data-lucide="rotate-ccw" style="width: 24px; height: 24px;"></i>
                 </div>
-                <h3 style="margin: 0; font-size: 18px; color: #0f172a;">Restore Document Record</h3>
-                <p style="margin: 0; font-size: 14px; color: #64748b;">Are you sure you want to restore this document back to active records?</p>
+                <h3 style="margin: 0; font-size: 18px; color: var(--text-primary);">Restore Document Record</h3>
+                <p style="margin: 0; font-size: 14px; color: var(--text-muted);">Are you sure you want to restore this document back to active records?</p>
             </div>
             <div class="modal-footer" style="justify-content: center;">
                 <button type="button" onclick="closeRestoreModal()" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Cancel</button>
@@ -276,6 +311,51 @@ $result = mysqli_stmt_get_result($stmt);
                 document.getElementById(pendingRestoreFormId).submit();
             }
         });
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toastNotification');
+            const toastIcon = document.getElementById('toastIcon');
+            document.getElementById('toastMessage').innerText = message;
+
+            if (type === 'error') {
+                toast.style.background = 'var(--toast-danger-bg)';
+                toastIcon.setAttribute('data-lucide', 'x-circle');
+                toastIcon.style.color = 'var(--toast-danger-icon)';
+            } else {
+                toast.style.background = 'var(--brand-solid)';
+                toastIcon.setAttribute('data-lucide', 'check-circle');
+                toastIcon.style.color = 'var(--toast-success-icon)';
+            }
+
+            toast.classList.remove('toast-hide');
+            toast.style.display = 'flex';
+            void toast.offsetWidth;
+            toast.classList.add('toast-show');
+            lucide.createIcons();
+
+            setTimeout(() => {
+                toast.classList.remove('toast-show');
+                toast.classList.add('toast-hide');
+                setTimeout(() => {
+                    toast.style.display = 'none';
+                    toast.classList.remove('toast-hide');
+                }, 200);
+            }, 3500);
+        }
+
+        <?php if (!empty($toast_message)): ?>
+            document.addEventListener('DOMContentLoaded', () => {
+                showToast(<?php echo json_encode($toast_message); ?>, <?php echo json_encode($toast_type); ?>);
+                if (window.history.replaceState) {
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+            });
+        <?php endif; ?>
     </script>
+
+    <div id="toastNotification" style="position: fixed; bottom: 20px; right: 20px; background: var(--brand-solid); color: var(--white); padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px var(--shadow-medium); display: none; align-items: center; gap: 10px; z-index: 1100; font-size: 13px; font-weight: 500;">
+        <i data-lucide="check-circle" id="toastIcon" style="width: 16px; color: var(--toast-success-icon);"></i>
+        <span id="toastMessage">Action completed.</span>
+    </div>
 </body>
 </html>

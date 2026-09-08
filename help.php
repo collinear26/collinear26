@@ -24,6 +24,10 @@ if (!isset($_SESSION['user_id'])) {
         if (localStorage.getItem('sidebar-collapsed') === 'true') {
             document.documentElement.classList.add('sidebar-is-collapsed');
         }
+        var savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark' || savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
     </script>
     <style>
         /* Interactive styles para sa clickable help cards at modal */
@@ -33,7 +37,7 @@ if (!isset($_SESSION['user_id'])) {
         }
         .help-card:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 12px 28px var(--shadow-medium);
             border-color: rgba(6, 78, 59, 0.4);
         }
 
@@ -54,7 +58,7 @@ if (!isset($_SESSION['user_id'])) {
             user-select: none;
         }
         .faq-question:hover {
-            color: #064e3b;
+            color: var(--brand);
         }
 
         /* Modal Overlay Style — ang overlay/panel/header chrome ay galing na sa
@@ -122,21 +126,21 @@ if (!isset($_SESSION['user_id'])) {
                     <div id="faqList">
                         <div class="faq-item">
                             <div class="faq-question" onclick="toggleFaq(this)">
-                                <i data-lucide="help-circle" style="width: 16px; color: #064e3b;"></i> How long does document approval usually take?
+                                <i data-lucide="help-circle" style="width: 16px; color: var(--brand);"></i> How long does document approval usually take?
                             </div>
                             <div class="faq-answer">Standard requests take around 1 to 3 working days depending on the approving authority and department queue.</div>
                         </div>
 
                         <div class="faq-item" style="margin-top: 14px;">
                             <div class="faq-question" onclick="toggleFaq(this)">
-                                <i data-lucide="help-circle" style="width: 16px; color: #064e3b;"></i> What file formats are supported for uploads?
+                                <i data-lucide="help-circle" style="width: 16px; color: var(--brand);"></i> What file formats are supported for uploads?
                             </div>
                             <div class="faq-answer">We strongly recommend uploading documents in <strong>PDF format</strong> up to 10MB to maintain document formatting and official integrity.</div>
                         </div>
 
                         <div class="faq-item" style="margin-top: 14px;">
                             <div class="faq-question" onclick="toggleFaq(this)">
-                                <i data-lucide="help-circle" style="width: 16px; color: #064e3b;"></i> Who can I contact for wrong routing or document cancellation?
+                                <i data-lucide="help-circle" style="width: 16px; color: var(--brand);"></i> Who can I contact for wrong routing or document cancellation?
                             </div>
                             <div class="faq-answer">You may send a direct message via the <strong>Messages</strong> tab or visit the ASCOT Records Management Office at the Main Campus.</div>
                         </div>
@@ -150,11 +154,11 @@ if (!isset($_SESSION['user_id'])) {
     <div class="modal-overlay help-modal" id="modalSubmit">
         <div class="modal-panel modal-panel--sm">
             <div class="modal-header">
-                <div class="modal-header-text"><h3 style="color: #064e3b;">Guide: Submitting Documents</h3></div>
+                <div class="modal-header-text"><h3 style="color: var(--brand);">Guide: Submitting Documents</h3></div>
                 <button type="button" class="modal-close" onclick="closeModal('modalSubmit')">&times;</button>
             </div>
             <div class="modal-body">
-                <p style="font-size: 13px; color: #334155; line-height: 1.6; margin: 0;">
+                <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin: 0;">
                     1. Navigate to the <strong>Submit Document</strong> section.<br>
                     2. Upload your file in <strong>PDF format</strong> (maximum of 10MB only).<br>
                     3. Fill out the required information and select the appropriate department routing.<br>
@@ -171,11 +175,11 @@ if (!isset($_SESSION['user_id'])) {
     <div class="modal-overlay help-modal" id="modalContact">
         <div class="modal-panel modal-panel--sm">
             <div class="modal-header">
-                <div class="modal-header-text"><h3 style="color: #064e3b;">ASCOT IT Services & Records Support</h3></div>
+                <div class="modal-header-text"><h3 style="color: var(--brand);">ASCOT IT Services & Records Support</h3></div>
                 <button type="button" class="modal-close" onclick="closeModal('modalContact')">&times;</button>
             </div>
             <div class="modal-body">
-                <p style="font-size: 13px; color: #334155; line-height: 1.6; margin: 0;">
+                <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin: 0;">
                     For urgent inquiries or technical concerns:<br><br>
                     📧 <strong>Email:</strong> support@ascot.edu.ph<br>
                     📞 <strong>Office Hours:</strong> Monday to Friday (8:00 AM - 5:00 PM)<br>

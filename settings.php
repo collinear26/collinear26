@@ -72,6 +72,10 @@ if (isset($_GET['pw_status'])) {
         if (localStorage.getItem('sidebar-collapsed') === 'true') {
             document.documentElement.classList.add('sidebar-is-collapsed');
         }
+        var savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark' || savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
     </script>
 </head>
 <body>
@@ -111,7 +115,7 @@ if (isset($_GET['pw_status'])) {
                             </div>
                             <div class="form-group">
                                 <label>Department / Role</label>
-                                <input type="text" value="<?php echo htmlspecialchars($user_dept . ' — ' . $user_role_label); ?>" readonly style="background: rgba(0,0,0,0.05); color: #64748b;">
+                                <input type="text" value="<?php echo htmlspecialchars($user_dept . ' — ' . $user_role_label); ?>" readonly style="background: var(--shadow-soft); color: var(--text-muted);">
                             </div>
                         </div>
                         <button type="submit" class="btn-save"><i data-lucide="save" style="width: 14px;"></i> Save Changes</button>
@@ -179,7 +183,7 @@ if (isset($_GET['pw_status'])) {
                 <!-- DATABASE BACKUP & MAINTENANCE (Admin only) -->
                 <div class="card">
                     <div class="card-title"><i data-lucide="database" style="width: 18px;"></i> Database Backup & Maintenance</div>
-                    <p style="font-size: 12px; color: #475569; margin-bottom: 16px; font-weight: 500;">
+                    <p style="font-size: 12px; color: var(--status-neutral-text); margin-bottom: 16px; font-weight: 500;">
                         I-download ang buong backup ng database o linisin ang mga pansamantalang logs at archived records ng sistema.
                     </p>
                     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
@@ -220,8 +224,8 @@ if (isset($_GET['pw_status'])) {
     </div>
 
     <!-- Toast Notification Container -->
-    <div id="toastNotification" style="position: fixed; bottom: 20px; right: 20px; background: #064e3b; color: #ffffff; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: none; align-items: center; gap: 10px; z-index: 1100; font-size: 13px; font-weight: 500;">
-        <i data-lucide="check-circle" id="toastIcon" style="width: 16px; color: #34d399;"></i>
+    <div id="toastNotification" style="position: fixed; bottom: 20px; right: 20px; background: var(--brand-solid); color: var(--white); padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px var(--shadow-medium); display: none; align-items: center; gap: 10px; z-index: 1100; font-size: 13px; font-weight: 500;">
+        <i data-lucide="check-circle" id="toastIcon" style="width: 16px; color: var(--toast-success-icon);"></i>
         <span id="toastMessage">Action completed.</span>
     </div>
 
@@ -236,13 +240,13 @@ if (isset($_GET['pw_status'])) {
             document.getElementById('toastMessage').innerText = message;
 
             if (type === 'error') {
-                toast.style.background = '#7f1d1d';
+                toast.style.background = 'var(--toast-danger-bg)';
                 toastIcon.setAttribute('data-lucide', 'x-circle');
-                toastIcon.style.color = '#fca5a5';
+                toastIcon.style.color = 'var(--toast-danger-icon)';
             } else {
-                toast.style.background = '#064e3b';
+                toast.style.background = 'var(--brand-solid)';
                 toastIcon.setAttribute('data-lucide', 'check-circle');
-                toastIcon.style.color = '#34d399';
+                toastIcon.style.color = 'var(--toast-success-icon)';
             }
 
             toast.style.display = 'flex';

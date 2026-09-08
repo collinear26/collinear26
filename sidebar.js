@@ -90,7 +90,33 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 3. PRESERVE SIDEBAR SCROLL POSITION
+    // 3. DARK MODE TOGGLE
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
+    if (themeToggleBtn) {
+        // Alamin ang KASALUKUYANG effective theme (hindi lang ang naka-save sa
+        // localStorage — kung wala pang naka-save, sundin ang OS preference,
+        // kaparehong logic ng ginagamit ng anti-flicker script/CSS media query)
+        function getEffectiveTheme() {
+            const saved = localStorage.getItem('theme');
+            if (saved === 'dark' || saved === 'light') return saved;
+            return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+
+        function applyTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            themeToggleBtn.setAttribute('aria-checked', theme === 'dark' ? 'true' : 'false');
+        }
+
+        applyTheme(getEffectiveTheme());
+
+        themeToggleBtn.addEventListener('click', () => {
+            const next = getEffectiveTheme() === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('theme', next);
+            applyTheme(next);
+        });
+    }
+
+    // 4. PRESERVE SIDEBAR SCROLL POSITION
     if (navMenu) {
         const savedScroll = sessionStorage.getItem('sidebar-scroll-pos');
         if (savedScroll !== null) {

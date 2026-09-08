@@ -3,6 +3,7 @@ session_start();
 include 'db_conn.php';
 include 'log_activity.php'; // I-include ang audit logger
 include 'csrf.php';
+include 'document_access.php';
 
 // Suriin kung naka-login ang user
 if (!isset($_SESSION['user_id'])) {
@@ -10,8 +11,10 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-// Admin-only: Archive Document (View/Add lang ang staff)
-if (strtolower(trim($_SESSION['user_type'] ?? '')) !== 'admin') {
+// Admin/Records Unit (master scope) na lang ang gate (BUG FIX: dating
+// admin-lang, kaya hindi na tugma sa documents.php na naka-widen na ang
+// row-actions visibility sa $is_master)
+if (!is_master_scope_user()) {
     header("Location: documents.php?error=unauthorized");
     exit();
 }
@@ -28,12 +31,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id'])) {
     mysqli_stmt_execute($doc_stmt);
     $doc_row = mysqli_fetch_assoc(mysqli_stmt_get_result($doc_stmt));
 
-    // I-update ang status ng dokumento patungong 'Archived'
-    $sql = "UPDATE documents SET tracking_status = 'Archived' WHERE id = ?";
+    // I-update ang status ng dokumento patungong 'Archived' — REDUNDANCY FIX:
+    // dating walang guard dito laban sa pag-archive ulit ng isang dokumentong
+    // Archived na (lalo na dahil laging nakikita ang Archive button kahit
+    // anong status). Kaya kapag paulit-ulit itong na-click, paulit-ulit ding
+    // nadadagdag ang parehong "Archived" entry sa Tracking Logs at Audit
+    // Logs — ang WHERE clause dito na "AND tracking_status != 'Archived'"
+    // (kasama ang affected_rows check sa ibaba) ang pumipigil dito.
+    $sql = "UPDATE documents SET tracking_status = 'Archived' WHERE id = ? AND tracking_status != 'Archived'";
     $stmt = mysqli_prepare($conn, $sql);
     mysqli_stmt_bind_param($stmt, "i", $doc_id);
 
-    if (mysqli_stmt_execute($stmt)) {
+    if (mysqli_stmt_execute($stmt) && mysqli_stmt_affected_rows($stmt) > 0) {
         // I-record sa Tracking Logs (Eksakto sa dating code mo)[cite: 5]
         if ($doc_row) {
             $tracking_no = "#REC-2026-" . str_pad($doc_id, 4, '0', STR_PAD_LEFT);

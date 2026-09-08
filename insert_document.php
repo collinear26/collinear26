@@ -36,8 +36,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //     Unit lang ang naglalagay nito, hindi ang submitting department)
     //   - Copy Retained (Records Unit operational detail, hindi alam ng
     //     submitting department kung may photocopy na naiwan sa opisina)
-    //   - OP Notes / Instructions (para lang sa OP/Records Unit sa susunod na
-    //     bahagi ng workflow, hindi bahagi ng orihinal na submission)
     //   - Dissemination Method (para lang sa Records Unit/Admin kapag
     //     inirerelease/dinidisseminate na ang document, hindi sa submission)
     // Ang Admin/Records Unit (master scope) lang ang may access sa mga field
@@ -57,7 +55,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stamped_date = NULL;
         $stamped_time = NULL;
         $copy_retained = 0;
-        $op_notes = NULL;
+        // OP Notes / Instructions: HINDI ito system-controlled tulad ng iba
+        // dito — kahit ordinaryong department (hal. OP mismo, kapag sila
+        // ang direktang nag-eencode ng sariling memo) ay pwedeng magsulat
+        // dito kung kanino dapat ipasa/i-disseminate ang document, dahil
+        // sila mismo ang nakakaalam nito sa oras ng submission — hindi na
+        // kailangang maghintay pa ng hiwalay na usapan/mensahe kay Records
+        // Unit bago ito malaman.
+        $op_notes = !empty($_POST['op_notes']) ? mb_substr(trim($_POST['op_notes']), 0, 1000) : NULL;
         $dissemination_method = NULL;
     }
 
@@ -73,10 +78,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // sino talaga ang nag-encode/naka-receive ng document na ito.
     $created_by = intval($_SESSION['user_id']);
 
-    // APPROVAL STATUS: laging "Pending" ang bagong document, hindi kailanman
-    // kinukuha mula sa $_POST — hindi ito settable ng kahit sino sa
-    // submission form (walang field man lang dito para dito)
-    $approval_status = 'Pending';
+    // APPROVAL STATUS: hindi kailanman kinukuha mula sa $_POST — hindi ito
+    // settable ng kahit sino sa submission form (walang field man lang dito
+    // para dito). Bunga na lang ito ngayon ng totoong "na-stamp na" na
+    // estado ng dokumento (kagaya ng ginagawa ng receive_document.php), hindi
+    // isang hiwalay na desisyon. Kaya kung Records Unit/Admin mismo ang
+    // direktang nag-encode nito na may Tracking Status na "Received" (ibig
+    // sabihin, hawak na nila ito at na-stamp na — kinolekta na rin ng form
+    // na ito ang Stamp Date/Time/Signatory sa itaas), "Approved" na agad ito
+    // — hindi na kailangan pang dumaan pa sa hiwalay na Receive & Stamp
+    // action para lang sa sarili nilang encoding.
+    $approval_status = ($is_master && $tracking_status === 'Received') ? 'Approved' : 'Pending';
 
     $file_type = 'PDF';
     $file_size = '1.0 MB';

@@ -4,15 +4,21 @@ $current_page = basename($_SERVER['PHP_SELF']);
 // Kuhanin ang user_type mula sa session at gawing lowercase para safe sa comparison
 $user_type = isset($_SESSION['user_type']) ? strtolower(trim($_SESSION['user_type'])) : '';
 
+// Para sa Archives/Reports links — Admin O kahit sinong Records Unit officer
+// (hindi lang basta "admin"), tugma sa access na ibinigay na sa mismong mga
+// pahinang iyon (is_master_scope_user()). Hindi ito kaparehong bagay ng
+// "$user_type === 'officer'" — dahil kasama doon kahit yung officer ng
+// IBANG department (hal. OP), na hindi dapat makakita ng Archives/Reports.
+if (!isset($conn)) {
+    include 'db_conn.php';
+}
+include_once 'document_access.php';
+$sidebar_is_master = is_master_scope_user();
+
 // Bilangin ang totoong unread messages ng naka-login na user, para sa
 // Messages nav badge (dati, "10" lang ang laging nakalagay, hardcoded)
 $unread_count = 0;
 if (isset($_SESSION['user_id'])) {
-    // Defensive check: siguraduhing available ang $conn kahit sakaling
-    // hindi pa na-include ang db_conn.php ng parent page
-    if (!isset($conn)) {
-        include 'db_conn.php';
-    }
     $my_id = intval($_SESSION['user_id']);
     $unread_query = mysqli_query($conn, "
         SELECT COUNT(*) as total FROM messages m
@@ -82,7 +88,7 @@ if (isset($_SESSION['user_id'])) {
 
         <!-- ADMINISTRATION SECTION: Admin makikita LAHAT, Officer (OP/OVPAA/OVPAPF)
              makikita LANG ang Approvals (department-scoped na sa approvals.php mismo) -->
-        <?php if ($user_type === 'admin' || $user_type === 'officer'): ?>
+        <?php if ($sidebar_is_master || $user_type === 'officer'): ?>
             <div class="section-label">ADMINISTRATION</div>
             <?php if ($user_type === 'admin'): ?>
                 <a href="users.php" class="nav-item <?php echo ($current_page == 'users.php') ? 'active' : ''; ?>">
@@ -95,7 +101,7 @@ if (isset($_SESSION['user_id'])) {
             <a href="approvals.php" class="nav-item <?php echo ($current_page == 'approvals.php') ? 'active' : ''; ?>">
                 <i data-lucide="user-check"></i> <span>Approvals</span>
             </a>
-            <?php if ($user_type === 'admin'): ?>
+            <?php if ($sidebar_is_master): ?>
                 <a href="archives.php" class="nav-item <?php echo ($current_page == 'archives.php') ? 'active' : ''; ?>">
                     <i data-lucide="archive"></i> <span>Archives</span>
                 </a>
@@ -112,6 +118,16 @@ if (isset($_SESSION['user_id'])) {
         <a href="settings.php" class="nav-item <?php echo ($current_page == 'settings.php') ? 'active' : ''; ?>">
             <i data-lucide="settings"></i> <span>Settings</span>
         </a>
+    </div>
+
+    <div class="theme-toggle-row" id="themeToggleRow">
+        <div class="theme-toggle-label">
+            <i data-lucide="moon" style="width:16px; height:16px;"></i>
+            <span>Dark Mode</span>
+        </div>
+        <button type="button" id="themeToggleBtn" class="theme-toggle-switch" role="switch" aria-checked="false" aria-label="Toggle dark mode">
+            <span class="theme-toggle-knob"></span>
+        </button>
     </div>
 
     <div class="user-profile">

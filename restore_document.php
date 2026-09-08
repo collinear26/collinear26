@@ -3,6 +3,7 @@ session_start();
 include 'db_conn.php';
 include 'log_activity.php'; // I-include ang audit logger
 include 'csrf.php';
+include 'document_access.php';
 
 // Suriin kung naka-login ang user
 if (!isset($_SESSION['user_id'])) {
@@ -10,8 +11,9 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-// Admin-only: Restore Document (Records Unit lang)
-if (strtolower(trim($_SESSION['user_type'] ?? '')) !== 'admin') {
+// Admin/Records Unit (master scope): Restore Document (BUG FIX: dating
+// admin-lang, hindi tugma sa ibang document actions na naka-widen na)
+if (!is_master_scope_user()) {
     header("Location: archives.php?error=unauthorized");
     exit();
 }
@@ -28,12 +30,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id'])) {
     mysqli_stmt_execute($doc_stmt);
     $doc_row = mysqli_fetch_assoc(mysqli_stmt_get_result($doc_stmt));
 
-    // I-update ang status pabalik sa 'Received'
-    $sql = "UPDATE documents SET tracking_status = 'Received' WHERE id = ?";
+    // I-update ang status pabalik sa 'Received' — REDUNDANCY FIX: dating
+    // walang guard laban sa pag-restore ulit ng isang hindi na naman
+    // Archived na dokumento, kaya paulit-ulit na nadadagdag ang parehong
+    // "Restored" entry sa Tracking Logs/Audit Logs kapag na-double-click o
+    // na-resubmit ang parehong form (kaparehong klase ng bug na na-fix na
+    // rin sa archive_document.php).
+    $sql = "UPDATE documents SET tracking_status = 'Received' WHERE id = ? AND tracking_status = 'Archived'";
     $stmt = mysqli_prepare($conn, $sql);
     mysqli_stmt_bind_param($stmt, "i", $doc_id);
 
-    if (mysqli_stmt_execute($stmt)) {
+    if (mysqli_stmt_execute($stmt) && mysqli_stmt_affected_rows($stmt) > 0) {
         // I-record sa Tracking Logs[cite: 5]
         if ($doc_row) {
             $tracking_no = "#REC-2026-" . str_pad($doc_id, 4, '0', STR_PAD_LEFT);

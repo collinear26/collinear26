@@ -166,6 +166,10 @@ if (isset($_GET['success'])) {
         if (localStorage.getItem('sidebar-collapsed') === 'true') {
             document.documentElement.classList.add('sidebar-is-collapsed');
         }
+        var savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark' || savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
     </script>
 </head>
 <body>
@@ -208,11 +212,11 @@ if (isset($_GET['success'])) {
                                         <div class="stat-icon"><i data-lucide="<?php echo htmlspecialchars($row['icon']); ?>"></i></div>
                                         <span class="status-badge status-received" style="font-size: 11px;"><?php echo $file_count; ?> Files</span>
                                     </div>
-                                    <h3 style="font-size: 18px; margin-bottom: 6px; color: #0f172a;"><?php echo htmlspecialchars($row['name']); ?></h3>
-                                    <p style="font-size: 13px; color: #64748b; line-height: 1.4;"><?php echo htmlspecialchars($row['description']); ?></p>
+                                    <h3 style="font-size: 18px; margin-bottom: 6px; color: var(--text-primary);"><?php echo htmlspecialchars($row['name']); ?></h3>
+                                    <p style="font-size: 13px; color: var(--text-muted); line-height: 1.4;"><?php echo htmlspecialchars($row['description']); ?></p>
                                 </div>
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px; padding-top: 12px; border-top: 1px solid rgba(0,0,0,0.06);" onclick="event.stopPropagation();">
-                                    <span style="font-size: 12px; color: #94a3b8;">Updated <?php echo date('M d, Y', strtotime($row['updated_at'])); ?></span>
+                                    <span style="font-size: 12px; color: var(--text-faint);">Updated <?php echo date('M d, Y', strtotime($row['updated_at'])); ?></span>
                                     <div class="action-btns" style="display: flex; gap: 4px;">
                                         <?php if (strtolower(trim($_SESSION['user_type'] ?? '')) === 'admin'): ?>
                                             <form method="POST" class="delete-category-form" data-file-count="<?php echo $file_count; ?>" data-category-name="<?php echo htmlspecialchars($row['name'], ENT_QUOTES); ?>" style="margin: 0;">
@@ -220,7 +224,7 @@ if (isset($_GET['success'])) {
                                                 <input type="hidden" name="action" value="delete">
                                                 <input type="hidden" name="category_id" value="<?php echo $row['id']; ?>">
                                                 <button type="button" class="action-icon-btn delete-category-btn" title="<?php echo $file_count > 0 ? 'Cannot delete: has linked documents' : 'Delete'; ?>" style="background:none; border:none; cursor:pointer;">
-                                                    <i data-lucide="trash-2" style="width:14px; color: <?php echo $file_count > 0 ? '#cbd5e1' : '#ef4444'; ?>;"></i>
+                                                    <i data-lucide="trash-2" style="width:14px; color: <?php echo $file_count > 0 ? 'var(--border-strong)' : 'var(--status-danger-solid)'; ?>;"></i>
                                                 </button>
                                             </form>
                                         <?php endif; ?>
@@ -229,7 +233,7 @@ if (isset($_GET['success'])) {
                             </div>
                         <?php endwhile; ?>
                     <?php else: ?>
-                        <p style="color: #64748b; grid-column: 1 / -1; text-align: center; padding: 20px;">No categories found.</p>
+                        <p style="color: var(--text-muted); grid-column: 1 / -1; text-align: center; padding: 20px;">No categories found.</p>
                     <?php endif; ?>
 
                 </div>
@@ -275,24 +279,24 @@ if (isset($_GET['success'])) {
     <div id="deleteConfirmModal" class="modal-overlay" style="display: none; z-index: 1050;">
         <div class="modal-panel modal-panel--sm" style="text-align: center;">
             <div class="modal-body" style="align-items: center;">
-                <div id="deleteModalIcon" style="width: 44px; height: 44px; border-radius: 50%; background: #fee2e2; display: flex; align-items: center; justify-content: center; margin: 6px auto 0 auto;">
-                    <i data-lucide="trash-2" style="width: 20px; color: #ef4444;"></i>
+                <div id="deleteModalIcon" style="width: 44px; height: 44px; border-radius: 50%; background: var(--danger-soft-hover); display: flex; align-items: center; justify-content: center; margin: 6px auto 0 auto;">
+                    <i data-lucide="trash-2" style="width: 20px; color: var(--status-danger-solid);"></i>
                 </div>
-                <h3 id="deleteModalTitle" style="margin: 0; font-size: 17px; color: #0f172a;">Delete Category</h3>
-                <p id="deleteModalMessage" style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0;">
+                <h3 id="deleteModalTitle" style="margin: 0; font-size: 17px; color: var(--text-primary);">Delete Category</h3>
+                <p id="deleteModalMessage" style="font-size: 13px; color: var(--text-muted); line-height: 1.5; margin: 0;">
                     Are you sure you want to delete this category?
                 </p>
             </div>
             <div class="modal-footer" style="justify-content: center;">
                 <button type="button" id="cancelDeleteBtn" class="modal-btn modal-btn-secondary"><i data-lucide="x"></i> Cancel</button>
-                <button type="button" id="confirmDeleteBtn" class="modal-btn" style="background: #ef4444; color: #fff;"><i data-lucide="trash-2"></i> Yes, Delete</button>
+                <button type="button" id="confirmDeleteBtn" class="modal-btn" style="background: var(--danger-solid); color: var(--white);"><i data-lucide="trash-2"></i> Yes, Delete</button>
             </div>
         </div>
     </div>
 
     <!-- Toast Notification Container -->
-    <div id="toastNotification" style="position: fixed; bottom: 20px; right: 20px; background: #064e3b; color: #ffffff; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: none; align-items: center; gap: 10px; z-index: 1100; font-size: 13px; font-weight: 500;">
-        <i data-lucide="check-circle" id="toastIcon" style="width: 16px; color: #34d399;"></i>
+    <div id="toastNotification" style="position: fixed; bottom: 20px; right: 20px; background: var(--brand-solid); color: var(--white); padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px var(--shadow-medium); display: none; align-items: center; gap: 10px; z-index: 1100; font-size: 13px; font-weight: 500;">
+        <i data-lucide="check-circle" id="toastIcon" style="width: 16px; color: var(--toast-success-icon);"></i>
         <span id="toastMessage">Action completed.</span>
     </div>
 
@@ -376,13 +380,13 @@ if (isset($_GET['success'])) {
             document.getElementById('toastMessage').innerText = message;
 
             if (type === 'error') {
-                toast.style.background = '#7f1d1d';
+                toast.style.background = 'var(--toast-danger-bg)';
                 toastIcon.setAttribute('data-lucide', 'x-circle');
-                toastIcon.style.color = '#fca5a5';
+                toastIcon.style.color = 'var(--toast-danger-icon)';
             } else {
-                toast.style.background = '#064e3b';
+                toast.style.background = 'var(--brand-solid)';
                 toastIcon.setAttribute('data-lucide', 'check-circle');
-                toastIcon.style.color = '#34d399';
+                toastIcon.style.color = 'var(--toast-success-icon)';
             }
 
             toast.classList.remove('toast-hide');
