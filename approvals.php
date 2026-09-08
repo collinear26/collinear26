@@ -361,7 +361,7 @@ if (isset($_GET['success'])) {
             <div class="modal-body">
             <div class="modal-section">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
-                    <p id="av_title" style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;"></p>
+                    <p id="av_title" style="margin: 0; font-size: 19px; font-weight: 700; color: #0f172a;"></p>
                     <span id="av_confidential_badge" style="display:none; background:#fee2e2; color:#991b1b; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:700; flex-shrink: 0;">CONFIDENTIAL</span>
                 </div>
             </div>

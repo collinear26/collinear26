@@ -519,7 +519,7 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
                 <?php else: ?>
                 <div class="modal-section">
                     <span class="modal-section-title">Submitting Department</span>
-                    <span style="display: block; font-size: 14px; font-weight: 700; color: #166534;"><?php echo htmlspecialchars($my_department ?: 'Not set — contact your Admin'); ?></span>
+                    <span style="display: block; font-size: 13.5px; font-weight: 600; color: #166534;"><?php echo htmlspecialchars($my_department ?: 'Not set — contact your Admin'); ?></span>
                     <span class="modal-hint">Automatically detected from your account — this cannot be changed here.</span>
                 </div>
                 <div class="modal-note">
@@ -677,7 +677,7 @@ $known_departments = array_map(function ($d) { return $d['name']; }, get_active_
 
             <div class="modal-section">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
-                    <p id="view_title" style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;"></p>
+                    <p id="view_title" style="margin: 0; font-size: 19px; font-weight: 700; color: #0f172a;"></p>
                     <div style="display: flex; gap: 6px; flex-shrink: 0;">
                         <span id="view_status_badge" style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;"></span>
                         <span id="view_confidential_badge" style="display: none; background: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700;">CONFIDENTIAL</span>

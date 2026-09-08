@@ -10,22 +10,51 @@ if (isset($_SESSION['user_id'])) {
 
 $error_message = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email     = mysqli_real_escape_string($conn, trim($_POST['email']));
-    $id_number = mysqli_real_escape_string($conn, trim($_POST['id_number']));
+// RATE LIMITING (security audit finding): dati, walang anumang limitasyon
+// sa pag-guess ng Email + ID Number combination dito, kahit na walang
+// email/OTP verification ang flow na ito. Kinokopya ang parehong
+// max-attempts/lockout pattern na ginagamit na ng login_process.php,
+// pero ito ay per-IP address dahil hindi pa alam kung existing ba talaga
+// ang account habang nag-a-attempt pa lang.
+define('RESET_MAX_ATTEMPTS', 5);
+define('RESET_LOCKOUT_MINUTES', 15);
 
-    if (empty($email) || empty($id_number)) {
+$ip_address = $_SERVER['REMOTE_ADDR'];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $email     = trim($_POST['email']);
+    $id_number = trim($_POST['id_number']);
+
+    // Tignan muna kung naka-lock ang IP address na ito dahil sa sunod-sunod
+    // na maling attempts kamakailan lang
+    $lock_check_stmt = mysqli_prepare($conn, "SELECT attempts, locked_until FROM password_reset_attempts WHERE ip_address = ?");
+    mysqli_stmt_bind_param($lock_check_stmt, "s", $ip_address);
+    mysqli_stmt_execute($lock_check_stmt);
+    $lock_row = mysqli_fetch_assoc(mysqli_stmt_get_result($lock_check_stmt));
+
+    if ($lock_row && !empty($lock_row['locked_until']) && strtotime($lock_row['locked_until']) > time()) {
+        $wait_minutes = max(1, (int) ceil((strtotime($lock_row['locked_until']) - time()) / 60));
+        $error_message = "For security, too many attempts have been made recently. Please try again in about {$wait_minutes} minute(s).";
+    } elseif (empty($email) || empty($id_number)) {
         $error_message = 'Please fill out both fields.';
     } else {
         // I-verify na magkatugma ang Email AT ID Number sa iisang account
         // (dalawang bagay na dapat malaman ng tunay na may-ari ng account,
         // hindi lang basta email — simpleng paraan ng identity verification
         // dahil walang naka-setup na email-sending/SMTP sa system)
-        $query = "SELECT id, firstname FROM users WHERE email = '$email' AND id_number = '$id_number' LIMIT 1";
-        $result = mysqli_query($conn, $query);
+        $query = "SELECT id, firstname FROM users WHERE email = ? AND id_number = ? LIMIT 1";
+        $stmt = mysqli_prepare($conn, $query);
+        mysqli_stmt_bind_param($stmt, "ss", $email, $id_number);
+        mysqli_stmt_execute($stmt);
+        $result = mysqli_stmt_get_result($stmt);
 
         if ($result && mysqli_num_rows($result) === 1) {
             $user = mysqli_fetch_assoc($result);
+
+            // Tamang combination: i-clear ang throttling counter ng IP na ito
+            $clear_stmt = mysqli_prepare($conn, "DELETE FROM password_reset_attempts WHERE ip_address = ?");
+            mysqli_stmt_bind_param($clear_stmt, "s", $ip_address);
+            mysqli_stmt_execute($clear_stmt);
 
             // I-store sa session na verified na ang identity niya, pansamantala lang
             // (gagamitin ito ng reset_password.php, aalisin agad pagkatapos gamitin)
@@ -35,7 +64,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header("Location: reset_password.php");
             exit();
         } else {
-            $error_message = 'No account found matching that Email and ID Number combination.';
+            // Maling combination: dagdagan ang attempt counter ng IP na ito,
+            // at i-lock kung umabot na sa limit
+            $new_attempts = ($lock_row ? intval($lock_row['attempts']) : 0) + 1;
+
+            if ($new_attempts >= RESET_MAX_ATTEMPTS) {
+                $upsert_stmt = mysqli_prepare($conn, "INSERT INTO password_reset_attempts (ip_address, attempts, locked_until) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE))
+                    ON DUPLICATE KEY UPDATE attempts = VALUES(attempts), locked_until = VALUES(locked_until)");
+                $lockout_minutes = RESET_LOCKOUT_MINUTES;
+                mysqli_stmt_bind_param($upsert_stmt, "sii", $ip_address, $new_attempts, $lockout_minutes);
+                mysqli_stmt_execute($upsert_stmt);
+                $error_message = "For security, too many attempts have been made. Please try again in {$lockout_minutes} minutes.";
+            } else {
+                $upsert_stmt = mysqli_prepare($conn, "INSERT INTO password_reset_attempts (ip_address, attempts) VALUES (?, ?)
+                    ON DUPLICATE KEY UPDATE attempts = VALUES(attempts)");
+                mysqli_stmt_bind_param($upsert_stmt, "si", $ip_address, $new_attempts);
+                mysqli_stmt_execute($upsert_stmt);
+                $error_message = 'No account found matching that Email and ID Number combination.';
+            }
         }
     }
 }

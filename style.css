@@ -508,16 +508,24 @@ html.sidebar-is-collapsed .user-info {
     border-bottom: 1px solid #e2e8f0;
     flex-shrink: 0;
 }
+/* TYPOGRAPHY HIERARCHY — sinasadyang magkaiba ang bigat/laki ng bawat antas
+   (title > section > label > value > secondary) para agad makilala ng mata
+   kung ano ang pinakamahalaga, sa halip na magmukhang parehong bigat/laki
+   ang lahat ng teksto sa loob ng modal. */
 .modal-header-text h3, .modal-header h3 {
     margin: 0;
-    font-size: 18px;
-    font-weight: 800;
+    font-size: 22px;
+    font-weight: 700;
     color: #0f172a;
+    line-height: 1.3;
+    letter-spacing: -0.2px;
 }
 .modal-subtitle {
     margin: 4px 0 0 0;
-    font-size: 12.5px;
+    font-size: 12px;
+    font-weight: 400;
     color: #64748b;
+    line-height: 1.4;
 }
 .modal-badge {
     display: inline-flex;
@@ -571,16 +579,21 @@ html.sidebar-is-collapsed .user-info {
     gap: 10px;
 }
 .modal-section-title {
-    margin: 0;
-    font-size: 11px;
-    font-weight: 800;
+    margin: 0 0 2px 0;
+    font-size: 11.5px;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: #166534;
 }
 .modal-field { display: flex; flex-direction: column; gap: 5px; }
-.modal-field label { font-size: 13px; font-weight: 600; color: #334155; }
-.modal-field label .hint { font-weight: 400; color: #94a3b8; font-size: 12px; }
+.modal-field label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #334155;
+    line-height: 1.4;
+}
+.modal-field label .hint { font-weight: 400; color: #94a3b8; font-size: 11.5px; }
 .modal-field input,
 .modal-field select,
 .modal-field textarea {
@@ -606,14 +619,20 @@ html.sidebar-is-collapsed .user-info {
 .modal-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; }
 .modal-info-label {
     display: block;
-    font-size: 11.5px;
-    font-weight: 700;
+    font-size: 10.5px;
+    font-weight: 600;
     color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.3px;
     margin-bottom: 3px;
 }
-.modal-info-value { margin: 0; color: #0f172a; font-size: 14px; }
+.modal-info-value {
+    margin: 0;
+    color: #0f172a;
+    font-size: 13.5px;
+    font-weight: 400;
+    line-height: 1.5;
+}
 
 .modal-timeline { display: flex; flex-direction: column; }
 .modal-timeline-item {

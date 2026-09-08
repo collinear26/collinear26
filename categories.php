@@ -315,11 +315,22 @@ if (isset($_GET['success'])) {
         const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
         let formToSubmit = null;
 
+        // Security audit fix: ang category name ay hindi restricted sa content
+        // pagka-create, kaya kailangan i-escape muna bago i-inject via innerHTML
+        // (dati, direktang ineexpose ang decoded na `.dataset` value nang walang
+        // re-escaping, kaya may stored-XSS na posibilidad kapag naglagay ng
+        // HTML/script sa loob ng pangalan ng category)
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
         document.querySelectorAll('.delete-category-btn').forEach((btn) => {
             btn.addEventListener('click', function () {
                 const form = this.closest('.delete-category-form');
                 const fileCount = parseInt(form.dataset.fileCount, 10);
-                const categoryName = form.dataset.categoryName;
+                const categoryName = escapeHtml(form.dataset.categoryName);
 
                 if (fileCount > 0) {
                     deleteModalMessage.innerHTML = `<strong>"${categoryName}"</strong> still has <strong>${fileCount} document(s)</strong> linked to it and cannot be deleted. Please reassign or remove those documents first.`;

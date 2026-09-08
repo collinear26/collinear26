@@ -163,15 +163,15 @@ if ($is_master) {
                             <div class="stat-icon"><i data-lucide="files"></i></div>
                             <div class="stat-info"><h3><?php echo number_format($total_docs); ?></h3><p>Total Documents (ASCOT-wide)</p></div>
                         </div>
-                        <div class="card stat-card" onclick="filterRecords('all')">
+                        <div class="card stat-card" onclick="filterRecords('incoming')">
                             <div class="stat-icon" style="background: rgba(14, 165, 233, 0.15); color: #0284c7;"><i data-lucide="inbox"></i></div>
                             <div class="stat-info"><h3><?php echo number_format($incoming_count); ?></h3><p>Incoming Documents</p></div>
                         </div>
-                        <div class="card stat-card" onclick="filterRecords('all')">
+                        <div class="card stat-card" onclick="filterRecords('outgoing')">
                             <div class="stat-icon" style="background: rgba(29, 78, 216, 0.15); color: #1d4ed8;"><i data-lucide="send"></i></div>
                             <div class="stat-info"><h3><?php echo number_format($outgoing_count); ?></h3><p>Outgoing Documents</p></div>
                         </div>
-                        <div class="card stat-card" onclick="filterRecords('Pending')">
+                        <div class="card stat-card" onclick="filterRecords('pending-approval')">
                             <div class="stat-icon" style="background: rgba(245, 158, 11, 0.15); color: #d97706;"><i data-lucide="clock"></i></div>
                             <div class="stat-info"><h3><?php echo number_format($pending_count); ?></h3><p>Pending Approval</p></div>
                         </div>
@@ -179,7 +179,7 @@ if ($is_master) {
                             <div class="stat-icon" style="background: rgba(13, 148, 136, 0.15); color: #0f766e;"><i data-lucide="check-check"></i></div>
                             <div class="stat-info"><h3><?php echo number_format($completed_count); ?></h3><p>Completed</p></div>
                         </div>
-                        <div class="card stat-card" onclick="filterRecords('all')">
+                        <div class="card stat-card" onclick="filterRecords('confidential')">
                             <div class="stat-icon" style="background: rgba(153, 27, 27, 0.12); color: #991b1b;"><i data-lucide="lock"></i></div>
                             <div class="stat-info"><h3><?php echo number_format($confidential_count); ?></h3><p>Confidential Documents</p></div>
                         </div>
@@ -194,11 +194,11 @@ if ($is_master) {
                             </div>
                         <?php endif; ?>
                     <?php else: ?>
-                        <div class="card stat-card" onclick="filterRecords('all')">
+                        <div class="card stat-card" onclick="filterRecords('mine')">
                             <div class="stat-icon"><i data-lucide="file-text"></i></div>
                             <div class="stat-info"><h3><?php echo number_format($my_submissions_count); ?></h3><p>My Submissions</p></div>
                         </div>
-                        <div class="card stat-card" onclick="filterRecords('Pending')">
+                        <div class="card stat-card" onclick="filterRecords('pending-approval')">
                             <div class="stat-icon" style="background: rgba(245, 158, 11, 0.15); color: #d97706;"><i data-lucide="inbox"></i></div>
                             <div class="stat-info"><h3><?php echo number_format($pending_count); ?></h3><p>Pending for My Office</p></div>
                         </div>
@@ -243,6 +243,7 @@ if ($is_master) {
                         <div class="card-title">
                             <i data-lucide="history" style="width: 16px;"></i> <?php echo $is_master ? 'Recent Document Activities (ASCOT-wide)' : 'My Recent Activity (Submissions &amp; ' . htmlspecialchars($my_department ?: 'Office') . ' Queue)'; ?>
                         </div>
+                        <button type="button" id="resetFilterBtn" onclick="filterRecords('all')" style="display:none; background:none; border:none; color:#166534; font-size:12px; font-weight:700; cursor:pointer; text-decoration:underline;">Show All</button>
                     </div>
 
                     <!-- DATA TABLE -->
@@ -270,7 +271,12 @@ if ($is_master) {
                                         $tracking_no = "#REC-" . str_pad($doc['id'], 4, '0', STR_PAD_LEFT);
                                         $doc_can_access = can_access_document($doc);
                                     ?>
-                                    <tr data-status="<?php echo htmlspecialchars($doc['tracking_status'] ?? ''); ?>" class="clickable-doc-row">
+                                    <tr data-status="<?php echo htmlspecialchars($doc['tracking_status'] ?? ''); ?>"
+                                        data-routing="<?php echo htmlspecialchars($doc['routing_type'] ?? ''); ?>"
+                                        data-approval="<?php echo htmlspecialchars($doc['approval_status'] ?? ''); ?>"
+                                        data-confidential="<?php echo !empty($doc['is_confidential']) ? '1' : '0'; ?>"
+                                        data-mine="<?php echo intval($doc['created_by'] ?? 0) === intval($_SESSION['user_id']) ? '1' : '0'; ?>"
+                                        class="clickable-doc-row">
                                         <td>
                                             <strong><?php echo htmlspecialchars($tracking_no); ?></strong>
                                             <?php if (!empty($doc['is_confidential'])): ?>
@@ -356,7 +362,7 @@ if ($is_master) {
 
             <div class="modal-section">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
-                    <p id="view_title" style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;"></p>
+                    <p id="view_title" style="margin: 0; font-size: 19px; font-weight: 700; color: #0f172a;"></p>
                     <span id="view_status_badge" style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; flex-shrink: 0;"></span>
                 </div>
                 <p style="margin: 4px 0 0 0; font-size: 12.5px; color: #64748b;" id="view_category"></p>
@@ -395,29 +401,67 @@ if ($is_master) {
     <script>
         lucide.createIcons();
 
-        // Function para i-filter ang mga records base sa na-click na stat card
-        function filterRecords(status) {
-            const rows = document.querySelectorAll('#recordsTable tbody tr');
-            
-            if (status === 'users') {
+        // Function para i-filter ang mga records base sa na-click na stat card.
+        // Dati, ilang card (Incoming/Outgoing/Confidential/My Submissions) ay
+        // basta "filterRecords('all')" lang ang tawag — parang gumagana pero
+        // hindi naman totoong pumipili base sa sariling meaning ng card. Ang
+        // "Pending Approval" naman ay sinusuri ang tracking_status sa halip na
+        // approval_status, kaya laging WALANG lumalabas na row (dahil hindi
+        // literal na "Pending" ang naitatalang tracking_status). Ngayon, ang
+        // bawat card ay may sariling tamang filter, gamit ang mga bagong
+        // data-routing/data-approval/data-confidential/data-mine attributes
+        // na nasa bawat <tr>.
+        const filterLabels = {
+            'all': 'All Records',
+            'incoming': 'Incoming Documents',
+            'outgoing': 'Outgoing Documents',
+            'pending-approval': 'Pending Approval',
+            'confidential': 'Confidential Documents',
+            'mine': 'My Submissions',
+            'Completed': 'Completed',
+            'Overdue': 'Overdue Tasks'
+        };
+
+        function filterRecords(filterType) {
+            if (filterType === 'users') {
                 showToast("Redirecting to Active Users management...");
                 setTimeout(() => { window.location.href = 'users.php'; }, 1000);
                 return;
-            } else if (status === 'storage') {
-                showToast("Storage management view is active.");
-                return;
             }
 
+            const rows = document.querySelectorAll('#recordsTable tbody tr');
             rows.forEach(row => {
-                const rowStatus = row.getAttribute('data-status');
-                if (status === 'all' || rowStatus === status) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
+                let show;
+                switch (filterType) {
+                    case 'all':
+                        show = true;
+                        break;
+                    case 'incoming':
+                        show = row.getAttribute('data-routing') === 'Receive';
+                        break;
+                    case 'outgoing':
+                        show = row.getAttribute('data-routing') === 'Release';
+                        break;
+                    case 'pending-approval':
+                        show = row.getAttribute('data-approval') === 'Pending';
+                        break;
+                    case 'confidential':
+                        show = row.getAttribute('data-confidential') === '1';
+                        break;
+                    case 'mine':
+                        show = row.getAttribute('data-mine') === '1';
+                        break;
+                    default:
+                        // Completed / Overdue — direktang tugma sa tracking_status
+                        show = row.getAttribute('data-status') === filterType;
                 }
+                row.style.display = show ? '' : 'none';
             });
 
-            showToast("Filtered table by: " + (status === 'all' ? 'All Records' : status));
+            const resetBtn = document.getElementById('resetFilterBtn');
+            if (resetBtn) resetBtn.style.display = (filterType === 'all') ? 'none' : 'inline';
+
+            showToast("Filtered table by: " + (filterLabels[filterType] || filterType));
         }
 
         const viewModal = document.getElementById('viewDocumentModal');

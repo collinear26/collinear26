@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'db_conn.php';
+include 'log_activity.php';
 
 // Kung naka-login na, hindi na kailangan ng reset flow na ito
 if (isset($_SESSION['user_id'])) {
@@ -31,19 +32,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error_message = 'Password must be at least 8 characters.';
     } else {
         $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
-        $update_query = "UPDATE users SET password_hash = '" . mysqli_real_escape_string($conn, $hashed_password) . "' WHERE id = " . intval($verified_user_id);
 
         try {
-            mysqli_query($conn, $update_query);
+            $update_stmt = mysqli_prepare($conn, "UPDATE users SET password_hash = ? WHERE id = ?");
+            mysqli_stmt_bind_param($update_stmt, "si", $hashed_password, $verified_user_id);
+            mysqli_stmt_execute($update_stmt);
 
             // Mag-record sa Audit Logs
+            // (BUG FIX: dating gumagamit ito ng hiwalay, hand-rolled na INSERT
+            // patungo sa user_name/ip_address na mga column na hindi umiiral
+            // sa audit_logs table — kaya laging tahimik na nabibigo ang log
+            // na ito dati. Ginagamit na ngayon ang parehong log_activity()
+            // helper na ginagamit ng buong system, tumutugma sa aktwal na
+            // schema nito: user_id, action, description.)
             $ip_address = $_SERVER['REMOTE_ADDR'];
-            $action_msg = "Reset own password via Forgot Password flow.";
-            $log_name = mysqli_real_escape_string($conn, $verified_name ?: 'User');
-
-            $log_query = "INSERT INTO audit_logs (user_name, action, ip_address) 
-                          VALUES ('$log_name', '$action_msg', '$ip_address')";
-            mysqli_query($conn, $log_query);
+            $action_msg = "Reset own password via Forgot Password flow (IP: {$ip_address}).";
+            log_activity($conn, $verified_user_id, "RESET_PASSWORD", $action_msg);
 
             // I-clear ang pansamantalang verification session, para isang beses lang magagamit
             unset($_SESSION['reset_verified_user_id']);
